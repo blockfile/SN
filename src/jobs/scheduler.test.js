@@ -25,6 +25,7 @@ test('pollOnce fires only once unclaimed fees are worth MIN_CLAIM_USD', async ()
     const p1 = await scheduler.pollOnce('poll');
     assert.strictEqual(p1.ran, false);
     assert.strictEqual(p1.reason, 'nothing claimable');
+    assert.strictEqual(scheduler.getState().lastClaimableUsd, 0);
 
     // $75 of fees → below the $100 threshold, no cycle row.
     simvault.reset(0.5);
@@ -33,6 +34,7 @@ test('pollOnce fires only once unclaimed fees are worth MIN_CLAIM_USD', async ()
     assert.strictEqual(p2.reason, 'below threshold');
     assert.strictEqual(p2.claimable, 0.5);
     assert.strictEqual(p2.claimableUsd, 75);
+    assert.strictEqual(scheduler.getState().lastClaimableUsd, 75);
     assert.strictEqual((await repo.getCycles(10, 0)).total, 0);
 
     // No price → never fire blind, even with plenty of fees.
@@ -41,6 +43,7 @@ test('pollOnce fires only once unclaimed fees are worth MIN_CLAIM_USD', async ()
     const p3 = await scheduler.pollOnce('poll');
     assert.strictEqual(p3.ran, false);
     assert.strictEqual(p3.reason, 'no price');
+    assert.strictEqual(scheduler.getState().lastClaimableUsd, null);
     assert.strictEqual((await repo.getCycles(10, 0)).total, 0);
     config.dryRunSolPriceUsd = 150;
 

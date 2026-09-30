@@ -41,6 +41,7 @@ async function pollOnce(trigger) {
   // bar tracks accrual live instead of polling /countdown.
   bus.emit('unclaimed', claimable);
   if (!(claimable > 0)) {
+    state.lastClaimableUsd = 0;
     return { ran: false, claimable, reason: 'nothing claimable' };
   }
   // The trigger is a USD amount. Without a fresh SOL price we can't know whether
