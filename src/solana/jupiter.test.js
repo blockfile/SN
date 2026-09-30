@@ -2,7 +2,13 @@
 const test = require('node:test');
 const assert = require('node:assert');
 process.env.DRY_RUN = 'true';
-const { buyViaJupiter } = require('./jupiter');
+const { buyViaJupiter, swapSlippageBps } = require('./jupiter');
+
+test('swapSlippageBps adds room for a Token-2022 transfer fee (charged up to twice on the way in)', () => {
+  assert.strictEqual(swapSlippageBps(100, 0), 100, 'no fee (NVDAx): just the base tolerance');
+  assert.strictEqual(swapSlippageBps(100, 100), 300, '$SI 1% fee: 1% base + 2×1%');
+  assert.strictEqual(swapSlippageBps(100, null), 100);
+});
 
 test('buyViaJupiter returns a simulated buy under DRY_RUN', async () => {
   const r = await buyViaJupiter('pumpCmXqMfrsAkQ5r49WcJnRayYRqmXz6ae8H7H9Dfn', 0.2);
@@ -13,10 +19,13 @@ test('buyViaJupiter returns a simulated buy under DRY_RUN', async () => {
 });
 
 // Live path with fetch, the token reads and the RPC stubbed out.
-async function withLiveJupiter({ confirmErr = null } = {}, fn) {
+async function withLiveJupiter({ confirmErr = null, feeBps = 0 } = {}, fn) {
   const { Keypair, TransactionMessage, VersionedTransaction } = require('@solana/web3.js');
   const config = require('../config');
   const tokens = require('./tokens');
+  const mintguard = require('./mintguard');
+  const realReadFee = mintguard.readTransferFeeBps;
+  mintguard.readTransferFeeBps = async () => feeBps;
   const { connection, wallet } = require('./connection');
   const realTokens = { getMintInfo: tokens.getMintInfo, readTokenBalance: tokens.readTokenBalance, readTokenBalanceSettled: tokens.readTokenBalanceSettled };
   const realConn = { sendRawTransaction: connection.sendRawTransaction, confirmTransaction: connection.confirmTransaction };
@@ -43,6 +52,7 @@ async function withLiveJupiter({ confirmErr = null } = {}, fn) {
   } finally {
     config.dryRun = true;
     config.slippagePct = realSlippagePct;
+    mintguard.readTransferFeeBps = realReadFee;
     global.fetch = realFetch;
     Object.assign(tokens, realTokens);
     Object.assign(connection, realConn);
@@ -68,5 +78,14 @@ test('buyViaJupiter (live) quotes with JUPITER_SLIPPAGE_BPS, not the AMM slippag
     await buyViaJupiter('DEW9dSN6QpWyNthphCpMmAbZP1Q4cEKR9xQXAri98WDP', 0.2);
     const quote = new URL(urls.find((u) => u.includes('/quote')));
     assert.strictEqual(quote.searchParams.get('slippageBps'), '100');
+  });
+});
+
+test('buyViaJupiter (live) widens slippage by the output mint’s transfer fee ($SI → 300 bps)', async () => {
+  // Live failure: $SI's 1% fee ate the whole 1% tolerance → Jupiter 0x1771 SlippageToleranceExceeded.
+  await withLiveJupiter({ feeBps: 100 }, async (urls) => {
+    await buyViaJupiter('DEW9dSN6QpWyNthphCpMmAbZP1Q4cEKR9xQXAri98WDP', 0.2);
+    const quote = new URL(urls.find((u) => u.includes('/quote')));
+    assert.strictEqual(quote.searchParams.get('slippageBps'), '300');
   });
 });

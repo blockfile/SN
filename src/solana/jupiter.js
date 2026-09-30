@@ -5,12 +5,21 @@ const config = require('../config');
 const { connection, wallet } = require('./connection');
 // Called through the module object so tests can stub the chain.
 const tokens = require('./tokens');
+const mintguard = require('./mintguard');
 
 // Wrapped SOL — Jupiter's input mint for a SOL spend (wrapAndUnwrapSol handles it).
 const SOL_MINT = 'So11111111111111111111111111111111111111112';
 
 function fakeSig(prefix) {
   return `${prefix}_${Date.now().toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`;
+}
+
+// A Token-2022 transfer fee is withheld from what lands in our account, and
+// Jupiter can move the output through an intermediate account first — so the fee
+// can be charged twice before its slippage check. Without this headroom a 1%-fee
+// token ($SI) fails every swap at a 1% tolerance (0x1771 SlippageToleranceExceeded).
+function swapSlippageBps(baseBps, transferFeeBps) {
+  return baseBps + 2 * (transferFeeBps || 0);
 }
 
 function jupHeaders() {
@@ -43,7 +52,7 @@ async function buyViaJupiter(mint, solAmount) {
     return { signature: null, tokensBought: 0, tokensBoughtRaw: '0', baseDecimals: 6, simulated: false, note: 'zero amount' };
   }
   const base = config.jupiterApi.replace(/\/+$/, '');
-  const slippageBps = config.jupiterSlippageBps;
+  const slippageBps = swapSlippageBps(config.jupiterSlippageBps, await mintguard.readTransferFeeBps(mint));
   const mintPk = new PublicKey(mint);
 
   // 1) Quote: SOL -> mint.
@@ -98,4 +107,4 @@ async function buyViaJupiter(mint, solAmount) {
   };
 }
 
-module.exports = { buyViaJupiter, SOL_MINT };
+module.exports = { buyViaJupiter, swapSlippageBps, SOL_MINT };

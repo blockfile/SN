@@ -42,6 +42,11 @@ async function readMintState(mint) {
   };
 }
 
+/** Current Token-2022 transfer fee of `mint` in bps (a pending raise counts); 0 when it has none. */
+async function readTransferFeeBps(mint) {
+  return (await readMintState(mint)).transferFeeBps ?? 0;
+}
+
 /** @returns {Promise<{ok: boolean, reason?: string}>} never throws */
 async function checkRewardMint(mint) {
   if (config.dryRun) return { ok: true };
@@ -52,4 +57,4 @@ async function checkRewardMint(mint) {
   }
 }
 
-module.exports = { evaluateMintGuard, maxFeeBps, checkRewardMint };
+module.exports = { evaluateMintGuard, maxFeeBps, checkRewardMint, readTransferFeeBps };
