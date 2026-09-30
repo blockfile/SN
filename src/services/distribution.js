@@ -95,21 +95,48 @@ function allocateOnce(holders, totalRaw, opts = {}) {
   return out;
 }
 
+// The largest holders (by balance) whose pro-rata shares of `total` all clear
+// `min`. Among the top k, the smallest share is total·b_k / (b_1+…+b_k), which
+// only shrinks as k grows — so take the longest prefix that still clears.
+function largestClearingFloor(holders, total, min) {
+  const sorted = holders
+    .map((h) => ({ h, bal: BigInt(h.balanceRaw.toString()) }))
+    .filter((x) => x.bal > 0n)
+    .sort((a, b) => (b.bal > a.bal ? 1 : b.bal < a.bal ? -1 : a.h.owner < b.h.owner ? -1 : 1));
+  let sum = 0n;
+  let k = 0;
+  for (const x of sorted) {
+    if (total * x.bal < min * (sum + x.bal)) break;
+    sum += x.bal;
+    k += 1;
+  }
+  return sorted.slice(0, k).map((x) => x.h);
+}
+
 // Public entry point. opts.minAmountRaw (optional) is the dust floor: recipients
 // whose share falls below it are dropped and the total is re-split among the
-// rest, repeating until every share clears the floor (each pass removes at least
-// one holder, so this terminates). The result still sums exactly to totalRaw —
-// or is [] when every share is dust, leaving the tokens in the wallet.
+// rest, repeating until every share clears the floor. When EVERY share is below
+// the floor (a small pot across many holders), the largest holders that can
+// clear it are kept instead of paying no one. Each pass shrinks the pool, so
+// this terminates. The result sums exactly to totalRaw — or is [] when even the
+// whole pot is below the floor, leaving the tokens in the wallet.
 function computeWeightedAllocations(holders, totalRaw, opts = {}) {
   const { minAmountRaw = null, ...rest } = opts;
   let out = allocateOnce(holders, totalRaw, rest);
   if (minAmountRaw == null) return out;
   const min = BigInt(minAmountRaw.toString());
+  const total = BigInt(totalRaw.toString());
   let pool = holders;
   for (;;) {
     const dust = new Set(out.filter((a) => BigInt(a.amountRaw) < min).map((a) => a.owner));
     if (dust.size === 0) return out;
-    pool = pool.filter((h) => !dust.has(h.owner));
+    if (dust.size === out.length) {
+      const top = largestClearingFloor(pool, total, min);
+      if (top.length === 0 || top.length >= pool.length) return [];
+      pool = top;
+    } else {
+      pool = pool.filter((h) => !dust.has(h.owner));
+    }
     out = allocateOnce(pool, totalRaw, rest);
   }
 }

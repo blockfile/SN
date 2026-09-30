@@ -141,3 +141,27 @@ test('minRawForUsd converts a USD floor into raw units at this buy price', () =>
   assert.strictEqual(minRawForUsd({ minUsd: 0, solSpent: 0.3, solPriceUsd: 150, tokensBoughtRaw: 30_000_000n }), null);
   assert.strictEqual(minRawForUsd({ minUsd: 0.5, solSpent: 0.3, solPriceUsd: 150, tokensBoughtRaw: 0n }), null);
 });
+
+test('when every share is dust, the largest holders that can clear the floor are still paid', () => {
+  // The live first cycle: a small pot across ~120 similar holders put every share under the
+  // floor and paid no one. 120 equal holders, pot 100, floor 10 → the top 10 get 10 each.
+  const holders = Array.from({ length: 120 }, (_, i) => ({ owner: `H${String(i).padStart(3, '0')}`, balanceRaw: '1' }));
+  const out = computeWeightedAllocations(holders, '100', { minAmountRaw: '10' });
+  assert.strictEqual(out.length, 10);
+  assert.ok(out.every((a) => a.amountRaw === '10'));
+  assert.strictEqual(toMap(out).sum, 100n);
+});
+
+test('all-dust fallback keeps the biggest holders by balance, pro-rata among them', () => {
+  // H1=40, H2=30, H3=20 + 97 holders of 1 (sum 187); pot 100, floor 30. Every first-pass
+  // share is < 30 (H1 ≈ 21). Top-k: k=2 clears (100·30 ≥ 30·70), k=3 doesn't (100·20 < 30·90).
+  // H1:H2 = 40:30 of 100 → 57.14 / 42.86 → largest remainder → 57 / 43.
+  const holders = [
+    { owner: 'H1', balanceRaw: '40' },
+    { owner: 'H2', balanceRaw: '30' },
+    { owner: 'H3', balanceRaw: '20' },
+    ...Array.from({ length: 97 }, (_, i) => ({ owner: `s${i}`, balanceRaw: '1' })),
+  ];
+  const out = computeWeightedAllocations(holders, '100', { minAmountRaw: '30' });
+  assert.deepStrictEqual(out, [{ owner: 'H1', amountRaw: '57' }, { owner: 'H2', amountRaw: '43' }]);
+});
