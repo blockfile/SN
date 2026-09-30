@@ -13,6 +13,7 @@ let repo;
 let simvault;
 let pumpfun;
 let mintguard;
+let marketing;
 let runCycle;
 
 // One mongod per file: db/index captures the URI at module load.
@@ -20,7 +21,18 @@ before(async () => {
   process.env.DRY_RUN = 'true';
   process.env.SIMULATE_GRADUATED = 'true';
   process.env.TOKEN_MINT = SN;
-  delete process.env.MARKETING_WALLET;
+  // Pin every env value the assertions depend on: dotenv (config.js) only fills keys
+  // that are absent, so a developer .env must not be able to change the expectations.
+  // MARKETING_WALLET is set to '' (not deleted) so dotenv can't fill it either.
+  process.env.MARKETING_WALLET = '';
+  process.env.MARKETING_PCT = '50';
+  process.env.BURN_PCT = '10';
+  process.env.NVDAX_PCT = '20';
+  process.env.SI_PCT = '20';
+  process.env.MIN_HOLD = '1';
+  process.env.MIN_AIRDROP_USD = '0.5';
+  process.env.DRY_RUN_SOL_PRICE_USD = '150';
+  process.env.REWARD_CAP_PCT = '0';
   delete require.cache[require.resolve('../config')];
   mongod = await MongoMemoryServer.create();
   process.env.MONGODB_URI = mongod.getUri();
@@ -30,6 +42,7 @@ before(async () => {
   simvault = require('../solana/simvault');
   pumpfun = require('../solana/pumpfun');
   mintguard = require('../solana/mintguard');
+  marketing = require('../solana/marketing');
   ({ runCycle } = require('./cycle'));
   await db.connect();
 });
@@ -100,5 +113,66 @@ test('a tripped mint guard skips only that token and is not a failure', async ()
     assert.strictEqual(count(cycle, 'airdrop'), 1);
   } finally {
     mintguard.checkRewardMint = realCheck;
+  }
+});
+
+test('marketing reads the balance before the claim and after the other legs, and sends net of overhead', async () => {
+  const realBalance = marketing.getWalletSolBalance;
+  const realSend = marketing.sendMarketing;
+  const realClaim = pumpfun.claimCreatorFees;
+  const calls = [];
+  const balances = [10, 10.74]; // 1.5 claimed − 0.75 spent on legs = 0.75 left; 0.74 seen → 0.01 overhead
+  let sent;
+  marketing.getWalletSolBalance = async () => {
+    calls.push('balance');
+    return balances.shift();
+  };
+  marketing.sendMarketing = async (sol) => {
+    calls.push('send');
+    sent = sol;
+    return { status: 'ok', signature: 'mkt', recipient: 'MKT', solSent: sol };
+  };
+  pumpfun.claimCreatorFees = async () => {
+    calls.push('claim');
+    return realClaim();
+  };
+  try {
+    simvault.reset(1.5);
+    const cycle = await runCycle();
+    assert.deepStrictEqual(calls, ['balance', 'claim', 'balance', 'send'], 'B0 before the claim, B1 after the legs, then send');
+    assert.strictEqual(sent, 0.73998, 'min(0.75 share, 10.74 − 10 − 0.00002 tx fee)');
+    assert.strictEqual(cycle.marketing_sol, 0.73998);
+    assert.strictEqual(cycle.steps[cycle.steps.length - 1].name, 'marketing', 'marketing runs last');
+  } finally {
+    marketing.getWalletSolBalance = realBalance;
+    marketing.sendMarketing = realSend;
+    pumpfun.claimCreatorFees = realClaim;
+  }
+});
+
+test("a failed leg's SOL is never swept into marketing", async () => {
+  const realBalance = marketing.getWalletSolBalance;
+  const realSend = marketing.sendMarketing;
+  const realBuy = pumpfun.buyToken;
+  const balances = [10, 11.04]; // 1.5 claimed − 0.3 NVDAx − 0.15 burn − 0.01 overhead; SI's 0.3 never left
+  let sent;
+  marketing.getWalletSolBalance = async () => balances.shift();
+  marketing.sendMarketing = async (sol) => {
+    sent = sol;
+    return { status: 'ok', signature: 'mkt', recipient: 'MKT', solSent: sol };
+  };
+  pumpfun.buyToken = async (mint, sol) => {
+    if (mint === SI) throw new Error('simulated SI outage');
+    return realBuy(mint, sol);
+  };
+  try {
+    simvault.reset(1.5);
+    const cycle = await runCycle();
+    assert.strictEqual(cycle.status, 'partial');
+    assert.strictEqual(sent, 0.75, 'capped at the marketing share, not the 1.04 − 0.00002 actually left over');
+  } finally {
+    marketing.getWalletSolBalance = realBalance;
+    marketing.sendMarketing = realSend;
+    pumpfun.buyToken = realBuy;
   }
 });
