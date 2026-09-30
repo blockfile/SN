@@ -234,3 +234,42 @@ test('no SOL price: the rewards leg fails closed, burn and marketing still run',
     config.dryRunSolPriceUsd = 150;
   }
 });
+
+test('a buy that returns 0 tokens fails its leg instead of airdropping nothing', async () => {
+  const realBuy = pumpfun.buyToken;
+  pumpfun.buyToken = async (mint, sol) => {
+    if (mint === SI) return { signature: 'sibuy', tokensBought: 0, tokensBoughtRaw: '0', baseDecimals: 6, simulated: true };
+    return realBuy(mint, sol);
+  };
+  try {
+    simvault.reset(1.5);
+    const cycle = await runCycle();
+    assert.strictEqual(cycle.status, 'partial');
+    const err = cycle.steps.find((s) => s.name === 'error');
+    assert.strictEqual(err.detail.leg, 'si');
+    assert.match(err.detail.message, /sibuy/, 'the tx is still traceable');
+    assert.strictEqual(count(cycle, 'airdrop'), 1, 'NVDAx only');
+    assert.deepStrictEqual(cycle.steps.filter((s) => s.name === 'buy').map((b) => b.detail.leg), ['nvdax', 'burn']);
+  } finally {
+    pumpfun.buyToken = realBuy;
+  }
+});
+
+test('a $SN buyback that returns 0 tokens fails the burn leg', async () => {
+  const realBuy = pumpfun.buyToken;
+  pumpfun.buyToken = async (mint, sol) => {
+    if (mint === SN) return { signature: 'snbuy0', tokensBought: 0, tokensBoughtRaw: '0', baseDecimals: 6, simulated: true };
+    return realBuy(mint, sol);
+  };
+  try {
+    simvault.reset(1.5);
+    const cycle = await runCycle();
+    assert.strictEqual(cycle.status, 'partial');
+    const err = cycle.steps.find((s) => s.name === 'error');
+    assert.strictEqual(err.detail.leg, 'burn');
+    assert.strictEqual(count(cycle, 'burn'), 0);
+    assert.strictEqual(count(cycle, 'airdrop'), 2, 'rewards unaffected');
+  } finally {
+    pumpfun.buyToken = realBuy;
+  }
+});

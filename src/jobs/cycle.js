@@ -17,6 +17,14 @@ const { getFreshSolPriceUsd } = require('../solana/price');
 // SOL for a leg: pct% of the claim, 6 dp (what the buy step records).
 const share = (solClaimed, pct) => +(solClaimed * (pct / 100)).toFixed(6);
 
+// A buy that yielded nothing (the swap failed, or nothing measurable arrived)
+// fails its leg instead of recording an empty buy, airdrop or burn.
+function requireBought(buy) {
+  const raw = BigInt(buy.tokensBoughtRaw || '0');
+  if (raw <= 0n) throw new Error(`buy returned no tokens (tx ${buy.signature})`);
+  return raw;
+}
+
 async function recordLegFailure(cycleId, leg, err) {
   const message = err && err.message ? err.message : String(err);
   console.log(`[cycle ${cycleId}] [${leg}] FAILED: ${message}`);
@@ -80,6 +88,7 @@ async function runRewardsLeg(cycleId, solClaimed, solPriceUsd) {
       }
 
       const buy = await pumpfun.buyToken(r.mint, solAmount);
+      const boughtRaw = requireBought(buy);
       await repo.addStep({
         cycleId,
         name: 'buy',
@@ -88,7 +97,6 @@ async function runRewardsLeg(cycleId, solClaimed, solPriceUsd) {
         detail: { leg: r.leg, buyMint: r.mint, solSpent: solAmount, tokensBought: buy.tokensBought },
       });
 
-      const boughtRaw = BigInt(buy.tokensBoughtRaw || '0');
       const minAmountRaw = minRawForUsd({
         minUsd: config.minAirdropUsd,
         solSpent: solAmount,
@@ -131,6 +139,7 @@ async function runBurnLeg(cycleId, solClaimed) {
       before = await readTokenBalance(connection, config.tokenMint, wallet.publicKey, programId);
     }
     const buy = await pumpfun.buyToken(config.tokenMint, solAmount);
+    const boughtRaw = requireBought(buy);
     await repo.addStep({
       cycleId,
       name: 'buy',
@@ -138,7 +147,7 @@ async function runBurnLeg(cycleId, solClaimed) {
       signature: buy.signature,
       detail: { leg: 'burn', buyMint: config.tokenMint, solSpent: solAmount, tokensBought: buy.tokensBought },
     });
-    const b = await burn.burnBought(config.tokenMint, buy.tokensBoughtRaw || '0', { keepAtLeastRaw: before });
+    const b = await burn.burnBought(config.tokenMint, boughtRaw.toString(), { keepAtLeastRaw: before });
     await repo.addStep({
       cycleId,
       name: 'burn',

@@ -3,7 +3,8 @@
 const { PublicKey, LAMPORTS_PER_SOL, VersionedTransaction } = require('@solana/web3.js');
 const config = require('../config');
 const { connection, wallet } = require('./connection');
-const { readTokenBalance, readTokenBalanceSettled, getMintInfo } = require('./tokens');
+// Called through the module object so tests can stub the chain.
+const tokens = require('./tokens');
 
 // Wrapped SOL — Jupiter's input mint for a SOL spend (wrapAndUnwrapSol handles it).
 const SOL_MINT = 'So11111111111111111111111111111111111111112';
@@ -73,18 +74,20 @@ async function buyViaJupiter(mint, solAmount) {
 
   // 3) Sign + send the versioned tx; measure the balance delta so the caller
   //    distributes only what actually arrived (never the wallet's full bag).
-  const { decimals: baseDecimals, programId } = await getMintInfo(connection, mintPk);
-  const balBefore = await readTokenBalance(connection, mintPk, wallet.publicKey, programId);
+  const { decimals: baseDecimals, programId } = await tokens.getMintInfo(connection, mintPk);
+  const balBefore = await tokens.readTokenBalance(connection, mintPk, wallet.publicKey, programId);
 
   const tx = VersionedTransaction.deserialize(Buffer.from(swap.swapTransaction, 'base64'));
   tx.sign([wallet]);
   const signature = await connection.sendRawTransaction(tx.serialize(), { maxRetries: 3 });
-  await connection.confirmTransaction(
+  const confirmed = await connection.confirmTransaction(
     { signature, blockhash: tx.message.recentBlockhash, lastValidBlockHeight: swap.lastValidBlockHeight },
     'confirmed'
   );
+  // A swap that fails on-chain still confirms; unchecked it reads as a 0-token buy.
+  if (confirmed.value.err) throw new Error(`Jupiter swap ${signature} failed: ${JSON.stringify(confirmed.value.err)}`);
 
-  const balAfter = await readTokenBalanceSettled(connection, mintPk, wallet.publicKey, programId, balBefore);
+  const balAfter = await tokens.readTokenBalanceSettled(connection, mintPk, wallet.publicKey, programId, balBefore);
   const boughtRaw = balAfter - balBefore;
   return {
     signature,
