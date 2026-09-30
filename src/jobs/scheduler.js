@@ -33,34 +33,35 @@ async function pollOnce(trigger) {
     console.log(`[scheduler] ${trigger} tick ignored — a cycle is already running`);
     return { ran: false, reason: 'cycle already running' };
   }
-
-  simulateFeeAccrual(); // no-op in live mode
-  const claimable = await getClaimableSol();
-  state.lastClaimable = claimable;
-  // Push the fresh balance to SSE clients so the frontend's threshold progress
-  // bar tracks accrual live instead of polling /countdown.
-  bus.emit('unclaimed', claimable);
-  if (!(claimable > 0)) {
-    state.lastClaimableUsd = 0;
-    return { ran: false, claimable, reason: 'nothing claimable' };
-  }
-  // The trigger is a USD amount. Without a fresh SOL price we can't know whether
-  // it's reached, so skip this tick rather than fire blind.
-  const price = await getFreshSolPriceUsd();
-  if (price == null) {
-    state.lastClaimableUsd = null;
-    console.log('[scheduler] no fresh SOL price — skipping tick');
-    return { ran: false, claimable, reason: 'no price' };
-  }
-  const claimableUsd = +(claimable * price).toFixed(2);
-  state.lastClaimableUsd = claimableUsd;
-  if (claimable * price < config.minClaimUsd) {
-    return { ran: false, claimable, claimableUsd, reason: 'below threshold' };
-  }
-
+  // Take the lock before the first await: otherwise a triggerNow() (or another
+  // tick) landing while we read the vault/price starts a second, concurrent cycle.
   state.isRunning = true;
-  state.lastRunAt = new Date().toISOString();
   try {
+    simulateFeeAccrual(); // no-op in live mode
+    const claimable = await getClaimableSol();
+    state.lastClaimable = claimable;
+    // Push the fresh balance to SSE clients so the frontend's threshold progress
+    // bar tracks accrual live instead of polling /countdown.
+    bus.emit('unclaimed', claimable);
+    if (!(claimable > 0)) {
+      state.lastClaimableUsd = 0;
+      return { ran: false, claimable, reason: 'nothing claimable' };
+    }
+    // The trigger is a USD amount. Without a fresh SOL price we can't know whether
+    // it's reached, so skip this tick rather than fire blind.
+    const price = await getFreshSolPriceUsd();
+    if (price == null) {
+      state.lastClaimableUsd = null;
+      console.log('[scheduler] no fresh SOL price — skipping tick');
+      return { ran: false, claimable, reason: 'no price' };
+    }
+    const claimableUsd = +(claimable * price).toFixed(2);
+    state.lastClaimableUsd = claimableUsd;
+    if (claimable * price < config.minClaimUsd) {
+      return { ran: false, claimable, claimableUsd, reason: 'below threshold' };
+    }
+
+    state.lastRunAt = new Date().toISOString();
     const cycle = await runCycle();
     state.lastResult = { id: cycle.id, status: cycle.status };
     return { ran: true, claimable, claimableUsd, cycle };

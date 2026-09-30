@@ -53,6 +53,10 @@ node scripts/run-once.js --confirm
 Runs claim → NVDAx + $SI buy/airdrop → $SN buyback & burn → marketing as one cycle
 and records it to MongoDB. Check every signature on Solscan.
 
+Stop the server first (`pm2 stop superneko`). `run-once.js` runs in its own process
+and does not share the server's in-memory cycle lock, so a scheduler tick could fire
+a second cycle at the same time.
+
 ## 5. Go live
 
 Only after 1–4 pass: `npm start`. The scheduler checks every minute and fires a cycle
