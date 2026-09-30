@@ -128,7 +128,7 @@ default) stays in the dev wallet.
 - `/airdrops?token=NVDAX|SI`.
 - `/api/status`: exposes the four percentages, reward mints, and `minClaimUsd`.
 - Activity feed: new `burn` and `marketing` step types get public labels.
-- `finishCycle` allowlist gains `marketing_sol`, `sn_burned_raw`, and `legs`.
+- `finishCycle` allowlist gains `marketing_sol`, `sn_burned` (UI units), and `legs`; legacy LP/lock fields are dropped.
 
 ## Rebrand and cleanup
 
