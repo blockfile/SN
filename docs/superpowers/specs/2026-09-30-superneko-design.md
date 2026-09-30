@@ -14,13 +14,12 @@ from pump.fun fund each cycle. Each cycle splits the claimed SOL four ways:
 |---|---|---|
 | Marketing | 50% | SOL transfer to `MARKETING_WALLET` |
 | Buyback & burn | 10% | buy $SN, burn it (SPL `burnChecked`) |
-| NvidiaX rewards | 15% | buy NVDAx, airdrop pro-rata to $SN holders |
-| $SI rewards | 15% | buy $SI, airdrop pro-rata to $SN holders |
-| Reserve (unallocated) | 10% | stays in the dev wallet; pays gas + ATA rent |
+| NvidiaX rewards | 20% | buy NVDAx, airdrop pro-rata to $SN holders |
+| $SI rewards | 20% | buy $SI, airdrop pro-rata to $SN holders |
 
-The four shares total 90%. The unallocated 10% is the reserve that covers
-transaction fees and new-recipient rent (about 0.0016 SOL per new token
-account, times two reward tokens).
+The shares total 100%. **Marketing is the reserve**: transaction fees and
+new-recipient rent (about 0.0016 SOL per new token account, times two reward
+tokens) are paid out of the marketing share before it is sent.
 
 ## Tokens (verified on-chain 2026-09-30)
 
@@ -60,8 +59,7 @@ operator. `NVDAX_PCT=0` disables the leg without code changes.
 ## Cycle
 
 Order matters: marketing runs **last**, so the real cost of the other steps
-is known before paying it. Gas and ATA rent come out of the 10% reserve first,
-and out of marketing only if they exceed the reserve.
+is known before paying it. Gas and ATA rent come out of the marketing share.
 
 1. **Snapshot the wallet balance** `B0` (before the claim).
 2. **Claim** $SN creator fees → `solClaimed`. Nothing claimed → `skipped`.
@@ -75,10 +73,10 @@ and out of marketing only if they exceed the reserve.
    `tokensBoughtRaw` from the wallet's $SN account. Never burn pre-existing balance.
 5. **Marketing**: `B1` = current balance.
    `send = min(solClaimed × MARKETING_PCT, B1 − B0 − txFee)`, clamped at ≥ 0.
-   `B1 − B0` is what is left of this cycle's claim after the other steps
-   (60% minus real overhead by default). Overhead up to the 10% reserve leaves
-   marketing whole; beyond that, marketing absorbs the rest. There are no
-   estimates, because it uses measured balances.
+   `B1 − B0` is what is left of this cycle's claim after the other steps: 50%
+   minus the real overhead (gas, priority fees, rent) by default. So marketing
+   receives its share net of costs. There are no estimates, because it uses
+   measured balances.
    - **`MARKETING_WALLET` blank or equal to the operating (dev) wallet → no
      transfer**; the share simply stays in the dev wallet. The step is recorded
      as `marketing` with `status: kept`.
@@ -89,9 +87,9 @@ try/catch. A failure records a `failed` step and the cycle continues. Unspent
 SOL from a failed or skipped leg stays in the wallet (the marketing formula
 caps at its 50%, so it is never swept to marketing).
 
-**Config:** `MARKETING_PCT=50`, `BURN_PCT=10`, `NVDAX_PCT=15`, `SI_PCT=15`.
-Startup fails if they sum to more than 100; whatever they leave unallocated is
-the reserve.
+**Config:** `MARKETING_PCT=50`, `BURN_PCT=10`, `NVDAX_PCT=20`, `SI_PCT=20`.
+Startup fails if they sum to more than 100. Any unallocated remainder (0 by
+default) stays in the dev wallet.
 
 ## Safety guards for the Token-2022 reward tokens
 
@@ -149,8 +147,9 @@ the reserve.
 - Scheduler: below/at the USD threshold, no-price skip, stale price, and
   `triggerNow` override.
 - Split: percentages validated at startup; per-leg SOL amounts are correct.
-- Marketing: the full 50% when overhead is at or below the reserve; reduced
-  when overhead exceeds it; clamped at 0; a blank or dev wallet produces `kept`.
+- Marketing: sends 50% minus the measured overhead; never above 50% (a
+  skipped leg's SOL isn't swept); clamped at 0; a blank or dev wallet produces
+  `kept`.
 - Cycle: the full DRY_RUN run records the steps claim, buy×2, airdrop×2,
   buy+burn, marketing; one failing leg → `partial` while the others complete.
 - Guards: paused NVDAx and a raised SI fee each skip only their own leg (pure
