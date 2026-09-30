@@ -128,8 +128,8 @@ function toPublicStats({ stats, unclaimedSol, operatingWallet, market = {} }) {
 }
 
 // The unclaimed-fees card payload (used by /api/unclaimed and the SSE stream).
-// Timer model: a cycle claims whatever has accrued on a fixed schedule — there is
-// no claim threshold — so this reports the live balance only.
+// The cycle trigger is USD-based (MIN_CLAIM_USD, checked by the scheduler); this
+// payload reports the live unclaimed balance only.
 function buildUnclaimedPayload(sol, price) {
   return {
     unclaimedSol: sol == null ? null : +sol.toFixed(6),

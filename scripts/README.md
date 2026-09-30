@@ -18,7 +18,7 @@ MONGODB_URI=<atlas or local>
 ```
 
 Fund the wallet with a **small** amount of SOL for the first tests. First cycles pay
-~0.0016 SOL rent per new NVDAx/$SI recipient, deducted from the marketing share.
+~0.002 SOL rent per new NVDAx/$SI recipient, deducted from the marketing share.
 
 > Rehearse first: keep `DRY_RUN=true` and run any script — it simulates, touches
 > nothing. Flip to `DRY_RUN=false` only when you're ready to spend real SOL.

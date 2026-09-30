@@ -236,7 +236,7 @@ pm2 logs superneko --lines 50
 
 ## Going live (real funds) — checklist
 - [ ] Paid `RPC_URL` set (public RPC can't enumerate large holder sets).
-- [ ] Funded `WALLET_PRIVATE_KEY` set (the $SN creator wallet; first cycles pay ~0.0016 SOL rent per new NVDAx/$SI recipient, deducted from marketing).
+- [ ] Funded `WALLET_PRIVATE_KEY` set (the $SN creator wallet; first cycles pay ~0.002 SOL rent per new NVDAx/$SI recipient, deducted from marketing).
 - [ ] `TOKEN_MINT` is the real $SN mint; `NVDAX_MINT` / `SI_MINT` left at their defaults.
 - [ ] `API_KEY` set to a long random string.
 - [ ] `DRY_RUN=false`, then `pm2 restart superneko` and watch `pm2 logs superneko` for the first cycle.

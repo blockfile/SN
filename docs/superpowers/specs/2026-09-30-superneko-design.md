@@ -18,7 +18,7 @@ from pump.fun fund each cycle. Each cycle splits the claimed SOL four ways:
 | $SI rewards | 20% | buy $SI, airdrop pro-rata to $SN holders |
 
 The shares total 100%. **Marketing is the reserve**: transaction fees and
-new-recipient rent (about 0.0016 SOL per new token account, times two reward
+new-recipient rent (about 0.002 SOL per new Token-2022 account, times two reward
 tokens) are paid out of the marketing share before it is sent.
 
 ## Tokens (verified on-chain 2026-09-30)

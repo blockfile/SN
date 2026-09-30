@@ -1,7 +1,10 @@
 'use strict';
 
-// Run ONE full cycle (claim → buy reward token → airdrop to holders) and record it.
-// The integration test. Amounts are driven by the actual claimed fees.
+// Run ONE full Super Neko cycle and record it: claim $SN creator fees → buy NVDAx
+// + $SI and airdrop them pro-rata to $SN holders → buy back & burn $SN → send the
+// marketing share (net of gas/rent). Ignores the MIN_CLAIM_USD threshold; amounts
+// are driven by the actual claimed fees. Stop the server first (`pm2 stop
+// superneko`): this process doesn't share its in-memory cycle lock.
 //   node scripts/run-once.js [--confirm]
 const { requireConfirm, hr } = require('./_util');
 const db = require('../src/db');
@@ -9,7 +12,7 @@ const { runCycle } = require('../src/jobs/cycle');
 
 (async () => {
   hr('RUN ONE FULL CYCLE');
-  if (!(await requireConfirm('run one full cycle (claim → buy reward → airdrop)'))) {
+  if (!(await requireConfirm('run one full cycle (claim → rewards airdrop → buyback & burn → marketing)'))) {
     process.exit(0);
   }
   await db.connect();
