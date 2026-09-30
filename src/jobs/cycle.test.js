@@ -14,6 +14,7 @@ let simvault;
 let pumpfun;
 let mintguard;
 let marketing;
+let burn;
 let runCycle;
 
 // One mongod per file: db/index captures the URI at module load.
@@ -43,6 +44,7 @@ before(async () => {
   pumpfun = require('../solana/pumpfun');
   mintguard = require('../solana/mintguard');
   marketing = require('../solana/marketing');
+  burn = require('../solana/burn');
   ({ runCycle } = require('./cycle'));
   await db.connect();
 });
@@ -174,5 +176,32 @@ test("a failed leg's SOL is never swept into marketing", async () => {
     marketing.getWalletSolBalance = realBalance;
     marketing.sendMarketing = realSend;
     pumpfun.buyToken = realBuy;
+  }
+});
+
+test('the burn leg burns exactly what its buy returned, guarded by the pre-buy balance', async () => {
+  const realBuy = pumpfun.buyToken;
+  const realBurn = burn.burnBought;
+  const burnCalls = [];
+  pumpfun.buyToken = async (mint, sol) => {
+    if (mint === SN) return { signature: 'snbuy', tokensBought: 0.004242, tokensBoughtRaw: '4242', baseDecimals: 6, simulated: true };
+    return realBuy(mint, sol);
+  };
+  burn.burnBought = async (...args) => {
+    burnCalls.push(args);
+    return { signature: 'snburn', burnedRaw: String(args[1]), simulated: true };
+  };
+  try {
+    simvault.reset(1.5);
+    const cycle = await runCycle();
+    assert.strictEqual(cycle.status, 'complete');
+    assert.strictEqual(burnCalls.length, 1);
+    const [mint, amountRaw, opts] = burnCalls[0];
+    assert.strictEqual(mint, SN);
+    assert.strictEqual(amountRaw, '4242', 'exactly the bought amount, never the wallet balance');
+    assert.deepStrictEqual(opts, { keepAtLeastRaw: null }, 'DRY_RUN has no real pre-buy balance to guard');
+  } finally {
+    pumpfun.buyToken = realBuy;
+    burn.burnBought = realBurn;
   }
 });

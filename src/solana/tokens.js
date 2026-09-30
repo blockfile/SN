@@ -19,12 +19,17 @@ const {
   createTransferCheckedInstruction,
   createBurnCheckedInstruction,
   createTransferCheckedWithTransferHookInstruction,
+  TokenAccountNotFoundError,
+  TokenInvalidAccountOwnerError,
 } = require('@solana/spl-token');
 const config = require('../config');
 
 /**
  * Read an SPL (or Token-2022) token balance for owner. Returns 0n if the ATA
  * doesn't exist yet. `programId` selects classic SPL vs Token-2022.
+ * Any other error (rate limit, fetch failure) is rethrown: buys measure what
+ * they bought as after − before, so a failed pre-buy read taken as 0 would
+ * count the wallet's whole existing balance as bought (and burn it).
  */
 async function readTokenBalance(connection, mint, owner, programId = TOKEN_PROGRAM_ID) {
   const ata = getAssociatedTokenAddressSync(
@@ -36,8 +41,9 @@ async function readTokenBalance(connection, mint, owner, programId = TOKEN_PROGR
   try {
     const acct = await getAccount(connection, ata, 'confirmed', programId);
     return acct.amount; // bigint, base units
-  } catch (_err) {
-    return 0n; // account not found => zero balance
+  } catch (err) {
+    if (err instanceof TokenAccountNotFoundError || err instanceof TokenInvalidAccountOwnerError) return 0n;
+    throw err;
   }
 }
 
