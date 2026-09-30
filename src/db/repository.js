@@ -126,17 +126,15 @@ async function getStats() {
           _id: null,
           cycles: { $sum: 1 },
           completed: { $sum: { $cond: [{ $eq: ['$status', 'complete'] }, 1, 0] } },
+          partial: { $sum: { $cond: [{ $eq: ['$status', 'partial'] }, 1, 0] } },
           failed: { $sum: { $cond: [{ $eq: ['$status', 'failed'] }, 1, 0] } },
           skipped: { $sum: { $cond: [{ $eq: ['$status', 'skipped'] }, 1, 0] } },
           total_sol_claimed: { $sum: { $ifNull: ['$sol_claimed', 0] } },
-          total_dev_fee: { $sum: { $ifNull: ['$dev_fee', 0] } },
-          total_sol_spent_buy: { $sum: { $ifNull: ['$sol_spent_buy', 0] } },
-          total_sol_spent_lp: { $sum: { $ifNull: ['$sol_spent_lp', 0] } },
-          total_tokens_bought: { $sum: { $ifNull: ['$tokens_bought', 0] } },
-          total_lp_locked: { $sum: { $ifNull: ['$lp_received', 0] } },
-          locks: { $sum: { $cond: [{ $ne: ['$lock_id', null] }, 1, 0] } },
+          total_marketing_sol: { $sum: { $ifNull: ['$marketing_sol', 0] } },
+          total_sn_burned: { $sum: { $ifNull: ['$sn_burned', 0] } },
         },
       },
+      { $project: { _id: 0 } },
     ])
     .toArray();
 
@@ -144,17 +142,31 @@ async function getStats() {
     row || {
       cycles: 0,
       completed: 0,
+      partial: 0,
       failed: 0,
       skipped: 0,
       total_sol_claimed: 0,
-      total_dev_fee: 0,
-      total_sol_spent_buy: 0,
-      total_sol_spent_lp: 0,
-      total_tokens_bought: 0,
-      total_lp_locked: 0,
-      locks: 0,
+      total_marketing_sol: 0,
+      total_sn_burned: 0,
     }
   );
+}
+
+// Successful buyback burns, newest first (powers GET /burns).
+async function getBurns(limit, offset) {
+  const db = getDb();
+  const filter = { name: 'burn', status: 'ok' };
+  const total = await db.collection('steps').countDocuments(filter);
+  const rows = await db.collection('steps').find(filter, NO_ID).sort({ id: -1 }).skip(offset).limit(limit).toArray();
+  const items = rows.map((s) => ({
+    cycleId: s.cycle_id,
+    mint: (s.detail && s.detail.mint) ?? null,
+    tokensBurned: (s.detail && s.detail.tokensBurned) ?? null,
+    burnedRaw: (s.detail && s.detail.burnedRaw) ?? null,
+    signature: s.signature,
+    at: s.created_at,
+  }));
+  return { total, items };
 }
 
 async function addAirdrop({ cycleId, rewardMint, recipient, amountRaw, amountUi, signature, status }) {
@@ -190,7 +202,7 @@ async function getAirdrops(limit, offset, rewardMint = null) {
 
 // Aggregate successful airdrop sends PER reward token: send count, total UI
 // amount distributed, and distinct recipient wallets. Returns a map keyed by
-// reward_mint (so each stream — $CUPSY — is reported separately).
+// reward_mint (so each stream — NVDAx, $SI — is reported separately).
 async function getAirdropTotals() {
   const db = getDb();
   const rows = await db
@@ -242,6 +254,7 @@ module.exports = {
   getLastCycle,
   getAllSteps,
   getStats,
+  getBurns,
   addAirdrop,
   getAirdrops,
   getAirdropTotals,

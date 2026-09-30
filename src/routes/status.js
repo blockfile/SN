@@ -11,7 +11,7 @@ const { getSolPriceUsd, toUsd } = require('../solana/price');
 
 const router = express.Router();
 
-const TOKEN_SYMBOL = process.env.TOKEN_SYMBOL || 'OUR';
+const TOKEN_SYMBOL = process.env.TOKEN_SYMBOL || 'SN';
 
 // GET /api/status — everything the dashboard needs: cards, totals (with USD),
 // live unclaimed fees, scheduler state, and the last cycle.
@@ -57,19 +57,27 @@ router.get('/status', async (req, res, next) => {
       },
       token: {
         mint: config.tokenMint,
-        cupsyMint: config.cupsyMint,
+        nvdaxMint: config.nvdaxMint,
+        siMint: config.siMint,
         pumpswapPoolId: config.pumpswapPoolId,
       },
-      // Reward-loop parameters (trigger, fee split, cap, eligibility).
+      // Cycle parameters (trigger, fee split, eligibility).
       config: {
         pollSchedule: config.pollSchedule,
-        cupsyBuyPct: config.cupsyBuyPct,
+        minClaimUsd: config.minClaimUsd,
+        marketingPct: config.marketingPct,
+        burnPct: config.burnPct,
+        nvdaxPct: config.nvdaxPct,
+        siPct: config.siPct,
+        marketingWallet: config.marketingWallet || walletPubkey(),
         rewardCapPct: config.rewardCapPct,
         minHold: config.minHold,
+        minAirdropUsd: config.minAirdropUsd,
       },
       totals: {
         cycles: stats.cycles,
         completed: stats.completed,
+        partial: stats.partial,
         failed: stats.failed,
         skipped: stats.skipped,
         solClaimed: stats.total_sol_claimed,

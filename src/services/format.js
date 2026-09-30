@@ -2,11 +2,10 @@
 
 const { toUsd } = require('../solana/price');
 
-const TOKEN_SYMBOL = process.env.TOKEN_SYMBOL || 'BABYCUPSY';
+const TOKEN_SYMBOL = process.env.TOKEN_SYMBOL || 'SN';
 
-// Map a stored step to the activity-row shape the dashboard renders. The cycle
-// emits these step types: claim, buy, airdrop (+ error). `leg` tags which reward
-// leg a step belongs to.
+// Map a stored step to the activity-row shape the dashboard renders.
+// The cycle emits these step types: claim, guard, buy, airdrop, burn, marketing (+ error). `leg` tags which leg a step belongs to.
 function toActivityRow(s, price) {
   const d = s.detail || {};
   let type;
@@ -26,6 +25,18 @@ function toActivityRow(s, price) {
     case 'airdrop':
       type = 'Airdrop';
       status = d.failed ? 'Failed' : 'Completed';
+      break;
+    case 'burn':
+      type = 'Buyback Burn';
+      break;
+    case 'marketing':
+      type = 'Marketing';
+      amountSol = d.solMarketing ?? null;
+      status = s.status === 'kept' ? 'Kept' : 'Completed';
+      break;
+    case 'guard':
+      type = 'Skipped';
+      status = 'Skipped';
       break;
     default:
       type = s.name;
@@ -54,6 +65,9 @@ const PUBLIC_TYPE = {
   claim: 'claim',
   buy: 'buy',
   airdrop: 'airdrop',
+  burn: 'burn',
+  marketing: 'marketing',
+  guard: 'skipped',
 };
 
 // Map a stored step to the exact ActivityRow shape the frontend table renders.
@@ -73,6 +87,13 @@ function toPublicActivityRow(s, price) {
       break;
     case 'airdrop':
       status = d.failed ? 'failed' : 'completed';
+      break;
+    case 'marketing':
+      amountSol = d.solMarketing ?? null;
+      status = s.status === 'kept' ? 'kept' : 'completed';
+      break;
+    case 'guard':
+      status = 'skipped';
       break;
     default:
       break;
@@ -117,24 +138,27 @@ function buildUnclaimedPayload(sol, price) {
   };
 }
 
-// Headline numbers for the frontend: $CUPSY distributed to BABYCUPSY holders.
-// byMint is keyed by reward_mint (repo.getAirdropTotals): { sends, totalUi, holders }.
-function toPublicSummary({ stats, byMint, eligibleHolders = 0, totalHolders = null, price, cupsyMint, marketCapUsd = null }) {
+// Headline numbers for the frontend: NVDAx + $SI distributed to $SN holders,
+// $SN burned, SOL to marketing. byMint is keyed by reward_mint
+// (repo.getAirdropTotals): { sends, totalUi, holders }.
+function toPublicSummary({ stats, byMint, eligibleHolders = 0, totalHolders = null, price, nvdaxMint, siMint, marketCapUsd = null }) {
   const z = { totalUi: 0, holders: 0, sends: 0 };
-  const cupsy = byMint[cupsyMint] || z;
+  const nvdax = byMint[nvdaxMint] || z;
+  const si = byMint[siMint] || z;
   const claimedSol = stats.total_sol_claimed || 0;
   return {
     creatorFeesClaimedSol: claimedSol,
     creatorFeesClaimedUsd: +(claimedSol * (price || 0)).toFixed(2),
     marketCapUsd: marketCapUsd ?? null,
-    // $CUPSY sent to BABYCUPSY holders
-    cupsyDistributed: cupsy.totalUi,
+    nvdaxDistributed: nvdax.totalUi,
+    siDistributed: si.totalUi,
+    snBurned: stats.total_sn_burned || 0,
+    marketingSol: stats.total_marketing_sol || 0,
     // currently-eligible holders (latest cycle's snapshot) — NOT the all-time recipient union
     holders: eligibleHolders,
-    // ALL wallets with any balance (Solscan-style), from the same snapshot;
-    // null until a cycle has recorded it
+    // ALL wallets with any balance (Solscan-style), from the same snapshot; null until recorded
     totalHolders,
-    distributions: cupsy.sends,
+    distributions: nvdax.sends + si.sends,
   };
 }
 

@@ -82,20 +82,19 @@ function clampInt(value, fallback, min, max) {
   return Math.min(Math.max(Math.trunc(n), min), max);
 }
 
-// Map a frontend token tab to its reward_mint. 'OUR' is the legacy tab key for
-// the main token (BABYCUPSY). Unknown/unconfigured tokens map to a sentinel so
-// the query returns empty (never an unfiltered dump).
+// Map a frontend token tab to its reward_mint. Unknown/unconfigured tokens map to
+// a sentinel so the query returns empty (never an unfiltered dump).
 function tokenToMint(token) {
   if (!token) return null;
   const map = {
-    CUPSY: config.cupsyMint,
-    BABYCUPSY: config.tokenMint,
-    OUR: config.tokenMint,
+    NVDAX: config.nvdaxMint,
+    SI: config.siMint,
+    SN: config.tokenMint,
   };
   return map[String(token).toUpperCase()] || '__none__';
 }
 
-// GET /airdrops?limit=&offset=&token=CUPSY|BABYCUPSY|OUR — per-recipient send history,
+// GET /airdrops?limit=&offset=&token=NVDAX|SI — per-recipient send history,
 // newest first. `token` filters by reward stream (the frontend's tabs).
 router.get('/airdrops', async (req, res, next) => {
   try {
@@ -180,7 +179,8 @@ const loadSummary = cached(10000, async () => {
     eligibleHolders: holderCounts.eligible,
     totalHolders: holderCounts.total,
     price,
-    cupsyMint: config.cupsyMint,
+    nvdaxMint: config.nvdaxMint,
+    siMint: config.siMint,
     marketCapUsd: market.marketCap ?? null,
   });
 });
@@ -189,6 +189,18 @@ const loadSummary = cached(10000, async () => {
 router.get('/summary', async (req, res, next) => {
   try {
     res.json(await loadSummary());
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /burns?limit=&offset= — $SN buyback burns, newest first.
+router.get('/burns', async (req, res, next) => {
+  try {
+    const limit = clampInt(req.query.limit, 100, 1, 500);
+    const offset = clampInt(req.query.offset, 0, 0, Number.MAX_SAFE_INTEGER);
+    const { total, items } = await repo.getBurns(limit, offset);
+    res.json({ total, limit, offset, items });
   } catch (err) {
     next(err);
   }

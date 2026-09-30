@@ -49,30 +49,47 @@ test('toPublicStats drops threshold/dev/liquidity fields', () => {
   }
 });
 
-test('toPublicSummary reports $CUPSY distributed, current eligible holders, no burn fields', () => {
+test('toPublicSummary reports NVDAx + SI distributed, $SN burned and marketing', () => {
   const out = toPublicSummary({
-    stats: { total_sol_claimed: 10 },
-    byMint: { CUPSY: { sends: 5, totalUi: 2000, holders: 50 } },
+    stats: { total_sol_claimed: 10, total_sn_burned: 5000, total_marketing_sol: 4.9 },
+    byMint: { NVDAX: { sends: 5, totalUi: 2, holders: 5 }, SI: { sends: 4, totalUi: 900, holders: 4 } },
     eligibleHolders: 42,
     totalHolders: 1200,
     price: 150,
-    cupsyMint: 'CUPSY',
+    nvdaxMint: 'NVDAX',
+    siMint: 'SI',
     marketCapUsd: 55_620_000,
   });
   assert.strictEqual(out.creatorFeesClaimedSol, 10);
   assert.strictEqual(out.creatorFeesClaimedUsd, 1500);
-  assert.strictEqual(out.cupsyDistributed, 2000);
+  assert.strictEqual(out.nvdaxDistributed, 2);
+  assert.strictEqual(out.siDistributed, 900);
+  assert.strictEqual(out.snBurned, 5000);
+  assert.strictEqual(out.marketingSol, 4.9);
   assert.strictEqual(out.holders, 42);
   assert.strictEqual(out.totalHolders, 1200);
-  assert.strictEqual(out.distributions, 5);
+  assert.strictEqual(out.distributions, 9);
   assert.strictEqual(out.marketCapUsd, 55_620_000);
-  assert.ok(!('benkBurned' in out), 'benkBurned should be gone');
-  assert.ok(!('tripletDistributed' in out), 'tripletDistributed should be gone');
-  assert.ok(!('tjrDistributed' in out), 'tjrDistributed should be gone');
+  assert.ok(!('cupsyDistributed' in out), 'cupsyDistributed should be gone');
 });
 
-test('toPublicSummary marketCapUsd and totalHolders default to null when not provided', () => {
-  const out = toPublicSummary({ stats: {}, byMint: {}, price: 0, cupsyMint: 'CUPSY' });
+test('toPublicSummary defaults: zeros for no activity, null marketCap/totalHolders', () => {
+  const out = toPublicSummary({ stats: {}, byMint: {}, price: 0, nvdaxMint: 'NVDAX', siMint: 'SI' });
   assert.strictEqual(out.marketCapUsd, null);
-  assert.strictEqual(out.totalHolders, null, 'null until a cycle has recorded it');
+  assert.strictEqual(out.totalHolders, null);
+  assert.strictEqual(out.nvdaxDistributed, 0);
+  assert.strictEqual(out.snBurned, 0);
+  assert.strictEqual(out.marketingSol, 0);
+});
+
+test('activity rows label burn and marketing steps', () => {
+  const burn = toPublicActivityRow({ name: 'burn', status: 'ok', detail: { leg: 'burn' }, signature: 's', created_at: '2026-09-30T00:00:00Z' }, 150);
+  assert.strictEqual(burn.type, 'burn');
+  const mkt = toPublicActivityRow({ name: 'marketing', status: 'kept', detail: { solMarketing: 0.5 }, signature: null, created_at: '2026-09-30T00:00:00Z' }, 150);
+  assert.strictEqual(mkt.type, 'marketing');
+  assert.strictEqual(mkt.amountSol, 0.5);
+  assert.strictEqual(mkt.usdtValue, 75);
+  assert.strictEqual(mkt.status, 'kept');
+  assert.strictEqual(toActivityRow({ name: 'burn', detail: {} }, 0).type, 'Buyback Burn');
+  assert.strictEqual(toActivityRow({ name: 'marketing', status: 'kept', detail: { solMarketing: 0.5 } }, 0).type, 'Marketing');
 });
