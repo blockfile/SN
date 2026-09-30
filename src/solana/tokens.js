@@ -17,6 +17,8 @@ const {
   createCloseAccountInstruction,
   createAssociatedTokenAccountIdempotentInstruction,
   createTransferCheckedInstruction,
+  createBurnCheckedInstruction,
+  createTransferCheckedWithTransferHookInstruction,
 } = require('@solana/spl-token');
 const config = require('../config');
 
@@ -134,6 +136,8 @@ module.exports = {
   getAssociatedTokenAddressSync,
   createAssociatedTokenAccountIdempotentInstruction,
   createTransferCheckedInstruction,
+  createBurnCheckedInstruction,
+  createTransferCheckedWithTransferHookInstruction,
   TOKEN_PROGRAM_ID,
   TOKEN_2022_PROGRAM_ID,
   NATIVE_MINT,
