@@ -124,14 +124,43 @@ const config = {
   cupsyMint: process.env.CUPSY_MINT || null, // $CUPSY: bought + airdropped to BABYCUPSY holders
   cupsyBuyPct: num(process.env.CUPSY_BUY_PCT, 80), // % of claim → buy $CUPSY (airdrop)
   rewardCapPct: num(process.env.REWARD_CAP_PCT, 0), // per-wallet weight cap, % of supply (0 = no cap)
-  minHold: num(process.env.MIN_HOLD, 100000), // min BABYCUPSY balance to qualify
+  minHold: num(process.env.MIN_HOLD, 1), // min $SN balance to qualify (whole tokens)
   clusters: parseClusters(process.env.CLUSTERS), // wallet groups treated as one person for the cap
-  airdropBatchSize: num(process.env.AIRDROP_BATCH_SIZE, 8), // recipient transfers per tx
+  // Recipients per airdrop tx. Token-2022 ATA creation is compute-heavy, so keep
+  // this small enough to fit COMPUTE_UNIT_LIMIT (failed batches retry one by one).
+  airdropBatchSize: num(process.env.AIRDROP_BATCH_SIZE, 5),
   // Extra owner addresses excluded from airdrops (both pool vaults, etc.), comma-separated.
   airdropExclude: (process.env.AIRDROP_EXCLUDE || '')
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean),
+
+  // ── Super Neko cycle ───────────────────────────────────────────────────────
+  // Trigger: a cycle fires once unclaimed creator fees are worth >= minClaimUsd.
+  minClaimUsd: num(process.env.MIN_CLAIM_USD, 100),
+  // DRY_RUN only: fixed SOL/USD so dry runs and tests never touch the network.
+  // 0 simulates "no price available".
+  dryRunSolPriceUsd: num(process.env.DRY_RUN_SOL_PRICE_USD, 150),
+
+  // Split of each claim, percent. Must sum to <= 100; any remainder stays in the
+  // operating (dev) wallet. Marketing is the reserve: gas + ATA rent spent by the
+  // other legs are deducted from it before it is sent.
+  marketingPct: num(process.env.MARKETING_PCT, 50),
+  burnPct: num(process.env.BURN_PCT, 10),
+  nvdaxPct: num(process.env.NVDAX_PCT, 20),
+  siPct: num(process.env.SI_PCT, 20),
+  // Blank (or the operating wallet itself) = the marketing share stays in the dev wallet.
+  marketingWallet: process.env.MARKETING_WALLET || null,
+
+  // Reward tokens. Hard-coded mints — never resolve these by name (many fake
+  // "NVIDIA xStock" copies exist on-chain).
+  nvdaxMint: process.env.NVDAX_MINT || 'Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh', // NVIDIA xStock (Token-2022, 8 dp)
+  siMint: process.env.SI_MINT || 'DEW9dSN6QpWyNthphCpMmAbZP1Q4cEKR9xQXAri98WDP', // Super Inu (Token-2022, 6 dp, 1% transfer fee)
+  // Skip a reward token's leg when its Token-2022 transfer fee exceeds this.
+  maxTransferFeeBps: num(process.env.MAX_TRANSFER_FEE_BPS, 100),
+  // Drop allocations worth less than this (≈ one new token account's rent) and
+  // redistribute them to the remaining holders.
+  minAirdropUsd: num(process.env.MIN_AIRDROP_USD, 0.5),
 
   // Storage (MongoDB)
   mongoUri: process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017',
@@ -147,5 +176,19 @@ const config = {
   // Secret protecting the POST control endpoints. Blank = open (dev); set in prod.
   apiKey: process.env.API_KEY || null,
 };
+
+// Fail fast on a misconfigured split — a sum over 100 would spend SOL the claim
+// never produced.
+function validateSplit(c) {
+  const parts = { MARKETING_PCT: c.marketingPct, BURN_PCT: c.burnPct, NVDAX_PCT: c.nvdaxPct, SI_PCT: c.siPct };
+  for (const [key, value] of Object.entries(parts)) {
+    if (!(value >= 0)) throw new Error(`${key} must be >= 0 (got ${value})`);
+  }
+  const sum = Object.values(parts).reduce((s, v) => s + v, 0);
+  if (sum > 100) {
+    throw new Error(`fee split sums to ${sum}% (MARKETING_PCT+BURN_PCT+NVDAX_PCT+SI_PCT must be <= 100)`);
+  }
+}
+validateSplit(config);
 
 module.exports = config;
