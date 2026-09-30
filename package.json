@@ -1,0 +1,40 @@
+{
+  "name": "babycupsy",
+  "version": "0.1.0",
+  "private": true,
+  "description": "BABYCUPSY reward system: recycles pump.fun creator fees into $CUPSY airdrops for BABYCUPSY holders (DRY_RUN first).",
+  "type": "commonjs",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "node --test",
+    "check": "node scripts/check.js",
+    "claim": "node scripts/claim.js",
+    "buy": "node scripts/buy.js",
+    "create-pool": "node scripts/create-pool.js",
+    "lock": "node scripts/lock.js",
+    "run-once": "node scripts/run-once.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@coral-xyz/anchor": "^0.31.1",
+    "@pump-fun/pump-sdk": "^1.36.0",
+    "@pump-fun/pump-swap-sdk": "^1.18.0",
+    "@solana/spl-token": "^0.4.9",
+    "@solana/web3.js": "^1.98.2",
+    "@streamflow/stream": "^12.4.0",
+    "bn.js": "^5.2.2",
+    "bs58": "^6.0.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "mongodb": "^6.12.0",
+    "node-cron": "^3.0.3"
+  },
+  "devDependencies": {
+    "mongodb-memory-server": "^10.1.4"
+  }
+}
