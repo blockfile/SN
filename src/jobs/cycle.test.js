@@ -205,3 +205,32 @@ test('the burn leg burns exactly what its buy returned, guarded by the pre-buy b
     burn.burnBought = realBurn;
   }
 });
+
+test('no SOL price: the rewards leg fails closed, burn and marketing still run', async () => {
+  const config = require('../config');
+  config.dryRunSolPriceUsd = 0; // simulates "no price available"
+  try {
+    simvault.reset(1.5);
+    const cycle = await runCycle();
+    assert.strictEqual(cycle.status, 'complete');
+    assert.strictEqual(count(cycle, 'airdrop'), 0, 'no airdrop without a dust floor');
+    const guards = cycle.steps.filter((s) => s.name === 'guard');
+    assert.deepStrictEqual(guards.map((g) => [g.status, g.detail.leg, g.detail.reason]), [
+      ['skipped', 'nvdax', 'no price'],
+      ['skipped', 'si', 'no price'],
+    ]);
+    assert.strictEqual(count(cycle, 'buy'), 1, 'only the $SN buyback');
+    assert.strictEqual(cycle.steps.find((s) => s.name === 'buy').detail.leg, 'burn');
+    assert.strictEqual(count(cycle, 'burn'), 1);
+    assert.strictEqual(count(cycle, 'marketing'), 1);
+    assert.deepStrictEqual(
+      cycle.legs.filter((l) => l.leg === 'nvdax' || l.leg === 'si'),
+      [
+        { leg: 'nvdax', status: 'skipped', reason: 'no price' },
+        { leg: 'si', status: 'skipped', reason: 'no price' },
+      ]
+    );
+  } finally {
+    config.dryRunSolPriceUsd = 150;
+  }
+});

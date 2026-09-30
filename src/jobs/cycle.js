@@ -23,6 +23,25 @@ async function recordLegFailure(cycleId, leg, err) {
   await repo.addStep({ cycleId, name: 'error', status: 'failed', detail: { leg, message } });
 }
 
+// Reward tokens bought with each claim and airdropped to $SN holders.
+const rewardTokens = () => [
+  { leg: 'nvdax', mint: config.nvdaxMint, pct: config.nvdaxPct },
+  { leg: 'si', mint: config.siMint, pct: config.siPct },
+];
+
+// No fresh SOL price means no dust floor, so an airdrop would reach every holder
+// of 1 $SN and pay new-account rent for each. Fail closed: skip both reward
+// tokens; their SOL stays in the wallet (marketing's cap keeps it from being swept).
+async function skipRewardsNoPrice(cycleId) {
+  const results = [];
+  for (const r of rewardTokens()) {
+    await repo.addStep({ cycleId, name: 'guard', status: 'skipped', detail: { leg: r.leg, mint: r.mint, reason: 'no price' } });
+    console.log(`[cycle ${cycleId}] [rewards] ${r.leg} skipped: no price`);
+    results.push({ leg: r.leg, status: 'skipped', reason: 'no price' });
+  }
+  return { results, eligibleHolders: null, totalHolders: null };
+}
+
 // Rewards: snapshot $SN holders ONCE, then for each reward token buy it and
 // airdrop it pro-rata. Distribution uses only what THIS cycle bought. Each token
 // is isolated — a guard trip or failure skips only that token, and its SOL
@@ -40,12 +59,8 @@ async function runRewardsLeg(cycleId, solClaimed, solPriceUsd) {
   const capPct = config.rewardCapPct > 0 ? config.rewardCapPct : null;
   const supplyRaw = capPct == null ? null : await getTokenSupplyRaw(connection, holderMint);
 
-  const rewards = [
-    { leg: 'nvdax', mint: config.nvdaxMint, pct: config.nvdaxPct },
-    { leg: 'si', mint: config.siMint, pct: config.siPct },
-  ];
   const results = [];
-  for (const r of rewards) {
+  for (const r of rewardTokens()) {
     const solAmount = share(solClaimed, r.pct);
     if (!(solAmount > 0) || !r.mint) {
       results.push({ leg: r.leg, status: 'skipped', reason: 'disabled' });
@@ -192,12 +207,16 @@ async function runCycle() {
 
     const solPriceUsd = await getFreshSolPriceUsd();
     let rewards;
-    try {
-      rewards = await runRewardsLeg(id, claim.solClaimed, solPriceUsd);
-    } catch (err) {
-      // Snapshot/setup failure — both reward tokens are lost for this cycle.
-      await recordLegFailure(id, 'rewards', err);
-      rewards = { results: [{ leg: 'rewards', status: 'failed', reason: err.message }], eligibleHolders: null, totalHolders: null };
+    if (solPriceUsd == null) {
+      rewards = await skipRewardsNoPrice(id);
+    } else {
+      try {
+        rewards = await runRewardsLeg(id, claim.solClaimed, solPriceUsd);
+      } catch (err) {
+        // Snapshot/setup failure — both reward tokens are lost for this cycle.
+        await recordLegFailure(id, 'rewards', err);
+        rewards = { results: [{ leg: 'rewards', status: 'failed', reason: err.message }], eligibleHolders: null, totalHolders: null };
+      }
     }
     const burnRes = await runBurnLeg(id, claim.solClaimed);
     const mkt = await runMarketingLeg(id, claim.solClaimed, balanceBeforeSol);
