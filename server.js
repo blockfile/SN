@@ -79,6 +79,8 @@ app.use((err, req, res, next) => {
 let server;
 
 async function main() {
+  // A blank API_KEY leaves POST /api/run open: live, anyone could force fee-paying cycles.
+  if (!config.dryRun && !config.apiKey) throw new Error('API_KEY is required when DRY_RUN=false');
   await db.connect();
   console.log(`[superneko] MongoDB connected (${config.mongoDb})`);
 

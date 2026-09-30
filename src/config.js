@@ -156,7 +156,8 @@ const config = {
     .map((s) => s.trim())
     .filter(Boolean),
 
-  // Secret protecting the POST control endpoints. Blank = open (dev); set in prod.
+  // Secret protecting the POST control endpoints. Blank = open; DRY_RUN only (server.js
+  // refuses to start live without it).
   apiKey: process.env.API_KEY || null,
 };
 
