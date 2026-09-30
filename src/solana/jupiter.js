@@ -43,7 +43,7 @@ async function buyViaJupiter(mint, solAmount) {
     return { signature: null, tokensBought: 0, tokensBoughtRaw: '0', baseDecimals: 6, simulated: false, note: 'zero amount' };
   }
   const base = config.jupiterApi.replace(/\/+$/, '');
-  const slippageBps = Math.round(config.slippagePct * 100);
+  const slippageBps = config.jupiterSlippageBps;
   const mintPk = new PublicKey(mint);
 
   // 1) Quote: SOL -> mint.

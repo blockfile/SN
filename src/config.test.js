@@ -28,6 +28,7 @@ test('config exposes the Super Neko split, trigger and reward mints', () => {
   assert.strictEqual(config.siMint, 'DEW9dSN6QpWyNthphCpMmAbZP1Q4cEKR9xQXAri98WDP');
   assert.strictEqual(config.maxTransferFeeBps, 100);
   assert.strictEqual(config.minAirdropUsd, 0.5);
+  assert.strictEqual(config.jupiterSlippageBps, 100, 'Jupiter buys: 1%, not the AMM SLIPPAGE_PCT');
 });
 
 test('config rejects a split over 100%', () => {

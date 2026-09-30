@@ -62,3 +62,11 @@ test('buyViaJupiter (live) throws when the swap fails on-chain', async () => {
     await assert.rejects(buyViaJupiter('DEW9dSN6QpWyNthphCpMmAbZP1Q4cEKR9xQXAri98WDP', 0.2), /jupsig failed/);
   });
 });
+
+test('buyViaJupiter (live) quotes with JUPITER_SLIPPAGE_BPS, not the AMM slippage', async () => {
+  await withLiveJupiter({}, async (urls) => {
+    await buyViaJupiter('DEW9dSN6QpWyNthphCpMmAbZP1Q4cEKR9xQXAri98WDP', 0.2);
+    const quote = new URL(urls.find((u) => u.includes('/quote')));
+    assert.strictEqual(quote.searchParams.get('slippageBps'), '100');
+  });
+});

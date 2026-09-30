@@ -90,6 +90,9 @@ const config = {
   jupiterApi: process.env.JUPITER_API || 'https://lite-api.jup.ag/swap/v1',
   jupiterApiKey: process.env.JUPITER_API_KEY || null,
   jupiterPriorityFeeLamports: num(process.env.JUPITER_PRIORITY_FEE_LAMPORTS, 1000000), // priority fee per Jupiter swap
+  // Jupiter buys' own slippage, in bps. Kept tight: the reward buys are ~40% of
+  // each claim, and a loose tolerance is what a sandwich bot extracts.
+  jupiterSlippageBps: num(process.env.JUPITER_SLIPPAGE_BPS, 100),
 
   // Schedule — the vault is CHECKED on this timer (default every minute). A cycle
   // only runs when the unclaimed balance has reached the MIN_CLAIM_USD threshold;
