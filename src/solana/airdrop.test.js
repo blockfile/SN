@@ -28,3 +28,25 @@ test('airdropToken records one send per allocation (DRY_RUN)', async () => {
     await mongod.stop();
   }
 });
+
+test('sendWithFallback: whole batch succeeds in one send', async () => {
+  const { sendWithFallback } = require('./airdrop');
+  const calls = [];
+  const res = await sendWithFallback([{ owner: 'A' }, { owner: 'B' }], async (b) => { calls.push(b.length); return 'sig'; });
+  assert.deepStrictEqual(calls, [2]);
+  assert.deepStrictEqual(res.map((r) => r.status), ['ok', 'ok']);
+});
+
+test("sendWithFallback: a failed batch retries one by one so one bad account can't sink it", async () => {
+  const { sendWithFallback } = require('./airdrop');
+  const send = async (b) => {
+    if (b.some((a) => a.owner === 'BAD')) throw new Error('account frozen');
+    return `sig-${b.map((a) => a.owner).join('')}`;
+  };
+  const res = await sendWithFallback([{ owner: 'A' }, { owner: 'BAD' }, { owner: 'C' }], send);
+  assert.deepStrictEqual(res.map((r) => [r.a.owner, r.status, r.signature]), [
+    ['A', 'ok', 'sig-A'],
+    ['BAD', 'failed', null],
+    ['C', 'ok', 'sig-C'],
+  ]);
+});
