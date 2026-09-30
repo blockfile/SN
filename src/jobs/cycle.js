@@ -54,18 +54,23 @@ async function skipRewardsNoPrice(cycleId) {
 // airdrop it pro-rata. Distribution uses only what THIS cycle bought. Each token
 // is isolated — a guard trip or failure skips only that token, and its SOL
 // stays in the wallet.
-async function runRewardsLeg(cycleId, solClaimed, solPriceUsd) {
-  const log = (m) => console.log(`[cycle ${cycleId}] [rewards] ${m}`);
+// Who rewards go to: $SN holders >= MIN_HOLD with the wallet/curve/pool
+// exclusions, plus the optional per-wallet cap. Shared with redistribute.
+async function snapshotRewardHolders() {
   const holderMint = config.tokenMint;
-
   const decimals = config.dryRun ? 6 : (await getMintInfo(connection, holderMint)).decimals;
   const minHoldRaw = BigInt(Math.trunc(config.minHold)) * 10n ** BigInt(decimals);
   const exclude = await buildExcludeSet(holderMint);
   const { holders, totalHolders } = await snapshotEligibleHolders({ mint: holderMint, minHoldRaw, exclude });
-  log(`${holders.length} eligible holders (>= ${config.minHold}) of ${totalHolders} total`);
-
   const capPct = config.rewardCapPct > 0 ? config.rewardCapPct : null;
   const supplyRaw = capPct == null ? null : await getTokenSupplyRaw(connection, holderMint);
+  return { holders, totalHolders, capPct, supplyRaw };
+}
+
+async function runRewardsLeg(cycleId, solClaimed, solPriceUsd) {
+  const log = (m) => console.log(`[cycle ${cycleId}] [rewards] ${m}`);
+  const { holders, totalHolders, capPct, supplyRaw } = await snapshotRewardHolders();
+  log(`${holders.length} eligible holders (>= ${config.minHold}) of ${totalHolders} total`);
 
   const results = [];
   for (const r of rewardTokens()) {
@@ -253,4 +258,4 @@ async function runCycle() {
   }
 }
 
-module.exports = { runCycle };
+module.exports = { runCycle, snapshotRewardHolders, rewardTokens, requireBought };

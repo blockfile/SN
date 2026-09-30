@@ -63,6 +63,28 @@ Only after 1–4 pass: `npm start`. The scheduler checks every minute and fires 
 once unclaimed fees are worth `MIN_CLAIM_USD` ($100). Watch `GET /api/status` and
 `GET /api/cycles`.
 
+## 6. Re-send rewards a cycle couldn't deliver
+
+When a cycle leaves reward tokens in the wallet (every share under `MIN_AIRDROP_USD`),
+or leaves a reward token's SOL unspent (its buy failed), airdrop them outside a cycle.
+Same holders, exclusions and `MIN_AIRDROP_USD` floor as a cycle; the site's totals include it.
+Pause the scheduler first so no cycle runs alongside:
+
+```
+curl -X POST https://api.superneko.meme/api/pause  -H "x-api-key: $KEY"
+
+# tokens already in the wallet: raw amount + the SOL they cost (prices the $ floor)
+node scripts/redistribute.js nvdax --amount-raw 4475413 --value-sol 0.086485            # preview
+node scripts/redistribute.js nvdax --amount-raw 4475413 --value-sol 0.086485 --confirm
+
+# unspent SOL: buy the token first, then airdrop what arrived
+node scripts/redistribute.js si --buy-sol 0.0865 --confirm
+
+curl -X POST https://api.superneko.meme/api/resume -H "x-api-key: $KEY"
+```
+The raw amount is the token amount × 10^decimals (NVDAx 8, $SI 6). The preview lists the
+recipients before anything is sent.
+
 ---
 
 **Safety reminders**

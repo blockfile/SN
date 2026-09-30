@@ -24,6 +24,15 @@ function arg(index = 0) {
   return positional[index];
 }
 
+/** Value of `--name value` or `--name=value`, or undefined. */
+function flagValue(name) {
+  const argv = process.argv.slice(2);
+  const eq = argv.find((a) => a.startsWith(`${name}=`));
+  if (eq) return eq.slice(name.length + 1);
+  const i = argv.indexOf(name);
+  return i >= 0 ? argv[i + 1] : undefined;
+}
+
 /**
  * Gate a mutating action behind --confirm. Without it, prints a preview and
  * returns false. With it, returns true (and pauses 3s first if this is a REAL
@@ -50,4 +59,4 @@ async function requireConfirm(actionDesc) {
   return true;
 }
 
-module.exports = { config, connection, wallet, hr, sol, hasFlag, arg, requireConfirm };
+module.exports = { config, connection, wallet, hr, sol, hasFlag, arg, flagValue, requireConfirm };
