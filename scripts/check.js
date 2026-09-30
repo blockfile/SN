@@ -31,7 +31,8 @@ const { config, connection, wallet, hr, sol } = require('./_util');
   const { OnlinePumpSdk } = require('@pump-fun/pump-sdk');
   const psdk = new OnlinePumpSdk(connection);
   try {
-    const claimable = await psdk.getCreatorVaultBalanceBothPrograms(wallet.publicKey);
+    const { creatorVaultLamports } = require('../src/solana/pumpfun');
+    const claimable = await creatorVaultLamports(psdk, connection, wallet.publicKey);
     console.log('claimable  :', sol(claimable.toString()), 'SOL');
     if (config.walletIsEphemeral) console.log('   (meaningless — this is a random wallet, not the creator)');
   } catch (e) {

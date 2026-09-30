@@ -3,7 +3,7 @@
 const { LAMPORTS_PER_SOL, PublicKey } = require('@solana/web3.js');
 const config = require('../config');
 const { connection, wallet } = require('./connection');
-const { sendIxs, unwrapWsol, readTokenBalance, readTokenBalanceSettled, getMintInfo, NATIVE_MINT } = require('./tokens');
+const { sendIxs, unwrapWsol, readTokenBalance, readTokenBalanceSettled, getMintInfo, NATIVE_MINT, TOKEN_PROGRAM_ID } = require('./tokens');
 const { buyOnAmm, resolveCanonicalPool } = require('./pumpswap');
 const { buyViaJupiter } = require('./jupiter');
 const simvault = require('./simvault');
@@ -37,8 +37,23 @@ async function getClaimableSol() {
   }
   const { OnlinePumpSdk } = require('@pump-fun/pump-sdk');
   const sdk = new OnlinePumpSdk(connection);
-  const lamports = await sdk.getCreatorVaultBalanceBothPrograms(wallet.publicKey);
+  const lamports = await creatorVaultLamports(sdk, connection, wallet.publicKey);
   return lamports.toNumber() / LAMPORTS_PER_SOL;
+}
+
+/**
+ * Creator fees waiting in both vaults (bonding curve + PumpSwap), in lamports (BN).
+ * Same total as sdk.getCreatorVaultBalanceBothPrograms(), but that call logs a
+ * TokenAccountNotFoundError stack on every read until the token graduates — the
+ * PumpSwap creator-vault WSOL account doesn't exist before then. Check the account
+ * first and only ask the SDK for the PumpSwap side once it exists.
+ */
+async function creatorVaultLamports(sdk, conn, creator) {
+  const { coinCreatorVaultAuthorityPda, coinCreatorVaultAtaPda } = require('@pump-fun/pump-swap-sdk');
+  const bondingCurve = await sdk.getCreatorVaultBalance(creator);
+  const ammVault = coinCreatorVaultAtaPda(coinCreatorVaultAuthorityPda(creator), NATIVE_MINT, TOKEN_PROGRAM_ID);
+  if (!(await conn.getAccountInfo(ammVault))) return bondingCurve;
+  return bondingCurve.add(await sdk.pumpAmmSdk.getCoinCreatorVaultBalance(creator));
 }
 
 /**
@@ -59,7 +74,7 @@ async function claimCreatorFees() {
   const { OnlinePumpSdk } = require('@pump-fun/pump-sdk');
   const sdk = new OnlinePumpSdk(connection);
 
-  const claimable = await sdk.getCreatorVaultBalanceBothPrograms(wallet.publicKey);
+  const claimable = await creatorVaultLamports(sdk, connection, wallet.publicKey);
   if (claimable.isZero()) {
     return { signature: null, solClaimed: 0, simulated: false, note: 'nothing to claim' };
   }
@@ -207,4 +222,4 @@ async function buyToken(mint, solAmount) {
   return buyViaJupiter(mint, solAmount);
 }
 
-module.exports = { claimCreatorFees, getClaimableSol, simulateFeeAccrual, isGraduated, resolveBuyRoute, buyOnCurve, buyToken, PUMP_PROGRAM_ID };
+module.exports = { claimCreatorFees, getClaimableSol, creatorVaultLamports, simulateFeeAccrual, isGraduated, resolveBuyRoute, buyOnCurve, buyToken, PUMP_PROGRAM_ID };
