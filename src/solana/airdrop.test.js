@@ -164,3 +164,26 @@ test('checkLanded: throws when it cannot tell before the deadline', async () => 
   const conn = fakeStatusConnection({ statuses: [null], heights: [1000] });
   await assert.rejects(checkLanded(conn, ambiguous, { pollMs: 1, timeoutMs: 20 }), /could not tell whether SIG1 landed/);
 });
+
+test('checkLanded: a transient RPC error while polling is retried, not treated as unknown', async () => {
+  const { checkLanded } = require('./airdrop');
+  const conn = fakeStatusConnection({ statuses: [{ err: null, confirmationStatus: 'confirmed' }], heights: [1000] });
+  const realStatuses = conn.getSignatureStatuses;
+  let calls = 0;
+  conn.getSignatureStatuses = async (...args) => {
+    calls += 1;
+    if (calls === 1) throw new Error('429 Too Many Requests');
+    return realStatuses(...args);
+  };
+  assert.strictEqual(await checkLanded(conn, ambiguous, fast), 'landed');
+  assert.strictEqual(calls, 2);
+});
+
+test('checkLanded: an RPC that keeps failing times out with the last error', async () => {
+  const { checkLanded } = require('./airdrop');
+  const conn = fakeStatusConnection({ statuses: [null], heights: [1000] });
+  conn.getBlockHeight = async () => {
+    throw new Error('503 Service Unavailable');
+  };
+  await assert.rejects(checkLanded(conn, ambiguous, { pollMs: 1, timeoutMs: 20 }), /could not tell whether SIG1 landed.*503/);
+});

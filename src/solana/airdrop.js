@@ -31,23 +31,30 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
  *   'landed' — confirmed/finalized without error
  *   'failed' — errored on-chain, or its blockhash expired with no status (it
  *              can never land now)
- * Throws when it can't tell within `timeoutMs`.
+ * Throws when it can't tell within `timeoutMs`. A failed RPC read is retried
+ * on the next poll, not taken as an answer.
  */
 async function checkLanded(connection, err, { pollMs = 2000, timeoutMs = 90_000 } = {}) {
   const deadline = Date.now() + timeoutMs;
+  let lastError = null;
   for (;;) {
-    // Height before status: expired AND still no status means it never landed.
-    const expired = (await connection.getBlockHeight('confirmed')) > err.lastValidBlockHeight;
-    const { value } = await connection.getSignatureStatuses([err.signature], { searchTransactionHistory: true });
-    const status = value && value[0];
-    if (status) {
-      const settled = status.confirmationStatus === 'confirmed' || status.confirmationStatus === 'finalized';
-      if (settled) return status.err == null ? 'landed' : 'failed';
-    } else if (expired) {
-      return 'failed';
+    try {
+      // Height before status: expired AND still no status means it never landed.
+      const expired = (await connection.getBlockHeight('confirmed')) > err.lastValidBlockHeight;
+      const { value } = await connection.getSignatureStatuses([err.signature], { searchTransactionHistory: true });
+      const status = value && value[0];
+      if (status) {
+        const settled = status.confirmationStatus === 'confirmed' || status.confirmationStatus === 'finalized';
+        if (settled) return status.err == null ? 'landed' : 'failed';
+      } else if (expired) {
+        return 'failed';
+      }
+    } catch (e) {
+      lastError = e;
     }
     if (Date.now() + pollMs > deadline) {
-      throw new Error(`could not tell whether ${err.signature} landed within ${Math.round(timeoutMs / 1000)}s`);
+      const why = lastError ? ` (last RPC error: ${lastError.message})` : '';
+      throw new Error(`could not tell whether ${err.signature} landed within ${Math.round(timeoutMs / 1000)}s${why}`);
     }
     await sleep(pollMs);
   }
