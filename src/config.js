@@ -153,9 +153,10 @@ const config = {
   siMint: process.env.SI_MINT || 'DEW9dSN6QpWyNthphCpMmAbZP1Q4cEKR9xQXAri98WDP', // Super Inu (Token-2022, 6 dp, 1% transfer fee)
   // Skip a reward token's leg when its Token-2022 transfer fee exceeds this.
   maxTransferFeeBps: num(process.env.MAX_TRANSFER_FEE_BPS, 100),
-  // Drop allocations worth less than this (≈ one new token account's rent) and
-  // redistribute them to the remaining holders.
-  minAirdropUsd: num(process.env.MIN_AIRDROP_USD, 0.5),
+  // Optional USD floor per payout. 0 (default) = off: every holder >= MIN_HOLD $SN
+  // is paid pro-rata. Above 0, smaller payouts are skipped (saving new-account
+  // rent, ~0.002 SOL) and their share goes to the remaining holders.
+  minAirdropUsd: num(process.env.MIN_AIRDROP_USD, 0),
 
   // Storage (MongoDB)
   mongoUri: process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017',

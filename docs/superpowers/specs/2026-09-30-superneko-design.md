@@ -115,11 +115,13 @@ default) stays in the dev wallet.
   **bonding-curve PDA** of $SN (new — without it the curve reserve would take
   most of the rewards before graduation), the canonical PumpSwap pool, and
   `AIRDROP_EXCLUDE`.
-- **Dust filter:** an allocation worth less than `MIN_AIRDROP_USD` (default
-  **0.50**, i.e. roughly a new token account's rent) is dropped, and its share
-  is redistributed to the remaining holders so the total still sums exactly.
-  The value uses the leg's own buy price (`solSpent / tokensBoughtRaw × SOL price`).
-  Implemented as `opts.minAmountRaw` in `computeWeightedAllocations`.
+- **Dust filter (optional, off by default):** eligibility is token-based
+  (`MIN_HOLD`), so with `MIN_AIRDROP_USD=0` every eligible holder is paid
+  pro-rata. Set above 0, payouts worth less are skipped (saving ~0.002 SOL of
+  new-account rent each) and their share goes to the largest holders that
+  clear it; the total still sums exactly. The value uses the leg's own buy
+  price (`solSpent / tokensBoughtRaw × SOL price`). Implemented as
+  `opts.minAmountRaw` in `computeWeightedAllocations`.
 
 ## API
 
