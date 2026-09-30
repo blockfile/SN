@@ -165,3 +165,19 @@ test('all-dust fallback keeps the biggest holders by balance, pro-rata among the
   const out = computeWeightedAllocations(holders, '100', { minAmountRaw: '30' });
   assert.deepStrictEqual(out, [{ owner: 'H1', amountRaw: '57' }, { owner: 'H2', amountRaw: '43' }]);
 });
+
+test('the floor never drops a holder who would clear it once smaller holders are removed', () => {
+  // Live bug: A's first-pass share cleared the floor, B's and C's didn't, and dropping every
+  // sub-floor share at once left A with the whole pot. A=300, B=150, C=140 + 100 holders of 1
+  // (sum 690); pot 1000, floor 250. First pass: A 434, B 217, C 203 → only A clears.
+  // Longest top-k that all clear: k=2 (1000·150 ≥ 250·450); k=3 fails (1000·140 < 250·590).
+  // A:B = 300:150 of 1000 → 666.67 / 333.33 → largest remainder → 667 / 333.
+  const holders = [
+    { owner: 'A', balanceRaw: '300' },
+    { owner: 'B', balanceRaw: '150' },
+    { owner: 'C', balanceRaw: '140' },
+    ...Array.from({ length: 100 }, (_, i) => ({ owner: `s${i}`, balanceRaw: '1' })),
+  ];
+  const out = computeWeightedAllocations(holders, '1000', { minAmountRaw: '250' });
+  assert.deepStrictEqual(out, [{ owner: 'A', amountRaw: '667' }, { owner: 'B', amountRaw: '333' }]);
+});
