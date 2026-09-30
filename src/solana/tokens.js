@@ -3,10 +3,12 @@
 const {
   Transaction,
   ComputeBudgetProgram,
-  sendAndConfirmTransaction,
   SystemProgram,
   PublicKey,
 } = require('@solana/web3.js');
+// bs58 v6 is ESM-only; under CommonJS require() the API is on `.default`.
+const bs58lib = require('bs58');
+const bs58 = bs58lib.default || bs58lib;
 const {
   TOKEN_PROGRAM_ID,
   TOKEN_2022_PROGRAM_ID,
@@ -89,7 +91,13 @@ async function getTokenSupplyRaw(connection, mint) {
   return BigInt(res.value.amount);
 }
 
-/** Prepend compute-budget (priority fee) instructions and send + confirm. */
+/**
+ * Prepend compute-budget (priority fee) instructions and send + confirm.
+ * The tx is signed before it is sent so its signature is known up front: a
+ * confirm can throw (blockhash expiry, dropped websocket, HTTP timeout) even
+ * though the tx landed. Any error after signing carries `err.signature` and
+ * `err.lastValidBlockHeight`, so a caller can check before it retries.
+ */
 async function sendIxs(connection, wallet, ixs, { label } = {}) {
   const tx = new Transaction();
   tx.add(
@@ -99,9 +107,21 @@ async function sendIxs(connection, wallet, ixs, { label } = {}) {
     })
   );
   for (const ix of ixs) tx.add(ix);
-  const signature = await sendAndConfirmTransaction(connection, tx, [wallet], {
-    commitment: 'confirmed',
-  });
+  const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
+  tx.recentBlockhash = blockhash;
+  tx.feePayer = wallet.publicKey;
+  tx.sign(wallet);
+  const signature = bs58.encode(tx.signature);
+  try {
+    await connection.sendRawTransaction(tx.serialize(), { preflightCommitment: 'confirmed' });
+    const res = await connection.confirmTransaction({ signature, blockhash, lastValidBlockHeight }, 'confirmed');
+    if (res.value.err) throw new Error(`transaction ${signature} failed: ${JSON.stringify(res.value.err)}`);
+  } catch (err) {
+    const e = err instanceof Error ? err : new Error(String(err));
+    e.signature = signature;
+    e.lastValidBlockHeight = lastValidBlockHeight;
+    throw e;
+  }
   if (label) console.log(`[tx] ${label}: ${signature}`);
   return signature;
 }

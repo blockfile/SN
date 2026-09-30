@@ -23,13 +23,62 @@ function fakeSig(prefix) {
   return `${prefix}_${Date.now().toString(36)}${Math.floor(Math.random() * 1e6).toString(36)}`;
 }
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Did the tx behind an ambiguous send failure land? `err` carries the
+ * signature and blockhash expiry that sendIxs attaches.
+ *   'landed' — confirmed/finalized without error
+ *   'failed' — errored on-chain, or its blockhash expired with no status (it
+ *              can never land now)
+ * Throws when it can't tell within `timeoutMs`.
+ */
+async function checkLanded(connection, err, { pollMs = 2000, timeoutMs = 90_000 } = {}) {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    // Height before status: expired AND still no status means it never landed.
+    const expired = (await connection.getBlockHeight('confirmed')) > err.lastValidBlockHeight;
+    const { value } = await connection.getSignatureStatuses([err.signature], { searchTransactionHistory: true });
+    const status = value && value[0];
+    if (status) {
+      const settled = status.confirmationStatus === 'confirmed' || status.confirmationStatus === 'finalized';
+      if (settled) return status.err == null ? 'landed' : 'failed';
+    } else if (expired) {
+      return 'failed';
+    }
+    if (Date.now() + pollMs > deadline) {
+      throw new Error(`could not tell whether ${err.signature} landed within ${Math.round(timeoutMs / 1000)}s`);
+    }
+    await sleep(pollMs);
+  }
+}
+
 // Send one batch; if it fails, retry each recipient alone so a single bad
 // account (frozen by the issuer, etc.) can't fail everyone in its batch.
-async function sendWithFallback(batch, sendFn) {
+// A send can throw after its tx landed (expiry, timeout), so with `checkLanded`
+// the batch is only retried once its tx is known not to have landed; if that
+// can't be determined it is marked failed — a missed payout beats a double one.
+async function sendWithFallback(batch, sendFn, { checkLanded: landed } = {}) {
   try {
     const signature = await sendFn(batch);
     return batch.map((a) => ({ a, status: 'ok', signature }));
   } catch (err) {
+    if (landed && err && err.signature) {
+      let outcome;
+      try {
+        outcome = await landed(err);
+      } catch (e) {
+        outcome = `unknown (${e.message})`;
+      }
+      if (outcome === 'landed') {
+        console.error(`[airdrop] batch of ${batch.length} threw (${err.message}) but landed: ${err.signature}`);
+        return batch.map((a) => ({ a, status: 'ok', signature: err.signature }));
+      }
+      if (outcome !== 'failed') {
+        console.error(`[airdrop] batch of ${batch.length} failed (${err.message}), ${err.signature} ${outcome} — NOT retrying`);
+        return batch.map((a) => ({ a, status: 'failed', signature: null }));
+      }
+    }
     if (batch.length === 1) {
       console.error(`[airdrop] ${batch[0].owner} failed: ${err.message}`);
       return [{ a: batch[0], status: 'failed', signature: null }];
@@ -73,7 +122,7 @@ async function makeLiveSender(rewardMint) {
     }
     return sendIxs(connection, wallet, ixs, { label: `airdrop batch (${batch.length})` });
   };
-  return { send, decimals };
+  return { send, decimals, checkLanded: (err) => checkLanded(connection, err) };
 }
 
 // Airdrop a reward token to allocations [{owner, amountRaw}], batching transfers.
@@ -84,13 +133,14 @@ async function airdropToken({ rewardMint, allocations, cycleId }) {
 
   let decimals = 6;
   let send = async () => fakeSig('airdrop');
-  if (!config.dryRun) ({ send, decimals } = await makeLiveSender(rewardMint));
+  let landed; // live only: resolves an ambiguous batch failure before any retry
+  if (!config.dryRun) ({ send, decimals, checkLanded: landed } = await makeLiveSender(rewardMint));
   const uiOf = (raw) => Number(raw) / 10 ** decimals;
 
   let sent = 0;
   let failed = 0;
   for (const batch of chunk(allocations, config.airdropBatchSize)) {
-    for (const r of await sendWithFallback(batch, send)) {
+    for (const r of await sendWithFallback(batch, send, { checkLanded: landed })) {
       await repo.addAirdrop({
         cycleId,
         rewardMint,
@@ -107,4 +157,4 @@ async function airdropToken({ rewardMint, allocations, cycleId }) {
   return { sent, failed };
 }
 
-module.exports = { airdropToken, sendWithFallback };
+module.exports = { airdropToken, sendWithFallback, checkLanded };
