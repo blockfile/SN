@@ -20,20 +20,25 @@ function evaluateMintGuard({ paused, transferFeeBps }, { maxTransferFeeBps }) {
   return { ok: true };
 }
 
-// A fee raise is scheduled as newerTransferFee and takes effect at a later
-// epoch, so guard on the higher of the two.
-function maxFeeBps(feeConfig) {
+// A fee change is scheduled as newerTransferFee and takes effect at its epoch.
+// Once that epoch arrives the newer fee is the fee (so a lowered fee unblocks the
+// leg); until then guard on the higher of the two, so a pending raise counts.
+function maxFeeBps(feeConfig, epoch) {
   if (!feeConfig) return null;
-  return Math.max(feeConfig.olderTransferFee.transferFeeBasisPoints, feeConfig.newerTransferFee.transferFeeBasisPoints);
+  const older = feeConfig.olderTransferFee;
+  const newer = feeConfig.newerTransferFee;
+  if (BigInt(epoch) >= BigInt(newer.epoch)) return newer.transferFeeBasisPoints;
+  return Math.max(older.transferFeeBasisPoints, newer.transferFeeBasisPoints);
 }
 
 async function readMintState(mint) {
   const { programId } = await getMintInfo(connection, mint);
   const mintAcc = await getMint(connection, new PublicKey(mint), 'confirmed', programId);
+  const { epoch } = await connection.getEpochInfo();
   const pausable = getPausableConfig(mintAcc);
   return {
     paused: pausable ? pausable.paused : false,
-    transferFeeBps: maxFeeBps(getTransferFeeConfig(mintAcc)),
+    transferFeeBps: maxFeeBps(getTransferFeeConfig(mintAcc), epoch),
   };
 }
 

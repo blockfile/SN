@@ -94,8 +94,9 @@ default) stays in the dev wallet.
 ## Safety guards for the Token-2022 reward tokens
 
 - **NVDAx paused** (`pausableConfig.paused`) → skip the NVDAx leg this cycle.
-- **SI fee raised** — read `transferFeeConfig` each cycle; if the newer fee is
-  above `MAX_TRANSFER_FEE_BPS` (default 100) → skip the SI leg.
+- **SI fee raised** — read `transferFeeConfig` each cycle; if the fee in effect
+  this epoch, or a pending newer fee, is above `MAX_TRANSFER_FEE_BPS` (default
+  100) → skip the SI leg. Once a lowered fee's epoch arrives it alone counts.
 - **Transfers** use `createTransferCheckedWithTransferHookInstruction`, which
   behaves as `transferChecked` today and keeps working if the issuer ever sets
   a transfer hook.
