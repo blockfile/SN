@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert');
-const { computeWeightedAllocations } = require('./distribution');
+const { computeWeightedAllocations, minRawForUsd } = require('./distribution');
 
 // helper: turn result into { owner: amount } and the integer sum
 function toMap(out) {
@@ -83,8 +83,6 @@ test('returns [] for empty / zero / all-zero-balance inputs', () => {
   );
 });
 
-const { minRawForUsd } = require('./distribution');
-
 test('dust filter drops sub-threshold recipients and redistributes their share', () => {
   // A's pro-rata share is 1 unit (< 10) → dropped; B receives everything.
   const out = computeWeightedAllocations(
@@ -106,6 +104,25 @@ test('dust filter re-checks after redistribution until stable', () => {
     { minAmountRaw: 5n }
   );
   assert.deepStrictEqual(out, [{ owner: 'C', amountRaw: '100' }]);
+});
+
+test('dust filter keeps re-checking across multiple passes', () => {
+  // total 45, floor 7. Pass 1: A=3, C=4, D=2 are dust (B's share rounds to 0).
+  // Pass 2 over {B, E, F}: B=1 is now dust. Pass 3 over {E, F}: 22.5 each → 23/22
+  // (largest-remainder tie broken by key).
+  const out = computeWeightedAllocations(
+    [
+      { owner: 'A', balanceRaw: '9' },
+      { owner: 'B', balanceRaw: '1' },
+      { owner: 'C', balanceRaw: '13' },
+      { owner: 'D', balanceRaw: '8' },
+      { owner: 'E', balanceRaw: '58' },
+      { owner: 'F', balanceRaw: '58' },
+    ],
+    '45',
+    { minAmountRaw: '7' }
+  );
+  assert.deepStrictEqual(out, [{ owner: 'E', amountRaw: '23' }, { owner: 'F', amountRaw: '22' }]);
 });
 
 test('dust filter returns [] when every share is dust', () => {

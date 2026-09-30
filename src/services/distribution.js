@@ -3,8 +3,7 @@
 // Weighted distribution of `totalRaw` base units across holders.
 //   holders : [{ owner, balanceRaw }]
 //   totalRaw: amount to distribute (string|bigint)
-//   opts.capPct  : number|null — cap each person's weight at capPct% of supplyRaw
-//                  (Leg A = 2). null = no cap (Leg B, pure pro-rata).
+//   opts.capPct  : number|null — cap each person's weight at capPct% of supplyRaw. null = no cap.
 //   opts.supplyRaw: total supply (string|bigint) — required when capPct != null.
 //   opts.clusters: array of address-groups; each group is ONE person for the cap,
 //                  then its reward is split among members pro-rata by member balance.
