@@ -26,12 +26,13 @@ function nextRun(schedule, nowMs) {
   return { nextAirdropAt: d.getTime(), intervalSec: intervalMin * 60 };
 }
 
-// Progress toward the claim threshold, 0-100 (clamped). Null when the unclaimed
-// balance isn't known yet (no poll has landed) or the threshold is disabled.
-function thresholdProgress(unclaimedSol, thresholdSol) {
-  if (unclaimedSol == null || !Number.isFinite(unclaimedSol)) return null;
-  if (!Number.isFinite(thresholdSol) || thresholdSol <= 0) return 100;
-  const pct = (unclaimedSol / thresholdSol) * 100;
+// Progress toward the claim threshold, 0-100 (clamped). Unit-agnostic (the
+// trigger passes USD). Null when the value isn't known yet (no poll landed / no
+// price); 100 when the threshold is disabled.
+function thresholdProgress(value, threshold) {
+  if (value == null || !Number.isFinite(value)) return null;
+  if (!Number.isFinite(threshold) || threshold <= 0) return 100;
+  const pct = (value / threshold) * 100;
   return +Math.min(100, Math.max(0, pct)).toFixed(1);
 }
 

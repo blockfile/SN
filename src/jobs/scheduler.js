@@ -5,6 +5,7 @@ const config = require('../config');
 const { runCycle } = require('./cycle');
 const { getClaimableSol, simulateFeeAccrual } = require('../solana/pumpfun');
 const bus = require('../events');
+const { getFreshSolPriceUsd } = require('../solana/price');
 
 const state = {
   task: null,
@@ -13,16 +14,18 @@ const state = {
   lastRunAt: null,
   lastResult: null, // { id, status }
   lastClaimable: null,
+  lastClaimableUsd: null,
   startedAt: null,
 };
 
 /**
  * One timer tick (every POLL_SCHEDULE, default every minute). Advances the simulated
  * vault (DRY_RUN only), reads the claimable creator-fee balance, and runs a cycle
- * only once that balance has reached MIN_CLAIM_SOL — below the threshold the tick
- * skips silently (no cycle row) and fees keep accruing. Overlap-guarded.
+ * only once that balance is worth MIN_CLAIM_USD at the current SOL price — below
+ * the threshold, or with no fresh price, the tick skips silently (no cycle row)
+ * and fees keep accruing. Overlap-guarded.
  * @param {string} trigger 'poll' | 'manual'
- * @returns {Promise<{ran:boolean, claimable?:number, reason?:string, cycle?:object}>}
+ * @returns {Promise<{ran:boolean, claimable?:number, claimableUsd?:number, reason?:string, cycle?:object}>}
  */
 async function pollOnce(trigger) {
   if (state.paused) return { ran: false, reason: 'paused' };
@@ -40,8 +43,18 @@ async function pollOnce(trigger) {
   if (!(claimable > 0)) {
     return { ran: false, claimable, reason: 'nothing claimable' };
   }
-  if (claimable < config.minClaimSol) {
-    return { ran: false, claimable, reason: 'below threshold' };
+  // The trigger is a USD amount. Without a fresh SOL price we can't know whether
+  // it's reached, so skip this tick rather than fire blind.
+  const price = await getFreshSolPriceUsd();
+  if (price == null) {
+    state.lastClaimableUsd = null;
+    console.log('[scheduler] no fresh SOL price — skipping tick');
+    return { ran: false, claimable, reason: 'no price' };
+  }
+  const claimableUsd = +(claimable * price).toFixed(2);
+  state.lastClaimableUsd = claimableUsd;
+  if (claimable * price < config.minClaimUsd) {
+    return { ran: false, claimable, claimableUsd, reason: 'below threshold' };
   }
 
   state.isRunning = true;
@@ -49,7 +62,7 @@ async function pollOnce(trigger) {
   try {
     const cycle = await runCycle();
     state.lastResult = { id: cycle.id, status: cycle.status };
-    return { ran: true, claimable, cycle };
+    return { ran: true, claimable, claimableUsd, cycle };
   } finally {
     state.isRunning = false;
   }
@@ -65,7 +78,7 @@ function start() {
     pollOnce('poll').catch((err) => console.error('[scheduler] poll error:', err));
   });
   console.log(
-    `[scheduler] started — checks "${config.pollSchedule}", claims at >= ${config.minClaimSol} SOL (dryRun=${config.dryRun})`
+    `[scheduler] started — checks "${config.pollSchedule}", claims at >= $${config.minClaimUsd} of fees (dryRun=${config.dryRun})`
   );
 }
 
@@ -85,7 +98,7 @@ function resume() {
 
 /**
  * Manual trigger from the API — forces a cycle immediately, ignoring both the
- * schedule and the MIN_CLAIM_SOL threshold (operator override for flushing a
+ * schedule and the MIN_CLAIM_USD threshold (operator override for flushing a
  * small balance).
  */
 async function triggerNow() {
@@ -104,12 +117,13 @@ async function triggerNow() {
 function getState() {
   return {
     pollSchedule: config.pollSchedule,
-    minClaimSol: config.minClaimSol,
+    minClaimUsd: config.minClaimUsd,
     paused: state.paused,
     isRunning: state.isRunning,
     lastRunAt: state.lastRunAt,
     lastResult: state.lastResult,
     lastClaimable: state.lastClaimable,
+    lastClaimableUsd: state.lastClaimableUsd,
     startedAt: state.startedAt,
   };
 }

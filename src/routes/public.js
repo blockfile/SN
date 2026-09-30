@@ -8,7 +8,7 @@ const express = require('express');
 const repo = require('../db/repository');
 const { getUnclaimedSol } = require('../services/metrics');
 const { getMarketData } = require('../services/marketdata');
-const { getSolPriceUsd } = require('../solana/price');
+const { getSolPriceUsd, toUsd } = require('../solana/price');
 const { walletPubkey } = require('../solana/connection');
 const { toPublicActivityRow, toPublicStats, toPublicSummary } = require('../services/format');
 const config = require('../config');
@@ -123,41 +123,42 @@ async function readUnclaimedSol() {
   return scheduler.getState().lastClaimable;
 }
 
-// GET /countdown — next vault CHECK plus progress toward the claim threshold.
-// Airdrops are threshold-triggered (unclaimed fees >= MIN_CLAIM_SOL), so there is
-// no fixed next-airdrop time; nextCheckAt is when the vault is next read, and
-// progressPct is how close that balance is to firing a cycle. nextAirdropAt is
-// retained as an alias of nextCheckAt so existing frontends keep working.
+// GET /countdown — next vault CHECK plus progress toward the USD claim threshold.
+// A cycle fires once unclaimed fees are worth MIN_CLAIM_USD, so there is no fixed
+// next-airdrop time; nextCheckAt is when the vault is next read. nextAirdropAt is
+// kept as an alias so existing frontends keep working.
 // Not cached: serverTime must be fresh so the client can anchor to the server clock.
 router.get('/countdown', async (req, res, next) => {
   try {
     const now = Date.now();
     const { nextAirdropAt, intervalSec } = nextRun(config.pollSchedule, now);
-    const unclaimedSol = await readUnclaimedSol();
+    const [unclaimedSol, price] = await Promise.all([readUnclaimedSol(), getSolPriceUsd().catch(() => null)]);
+    const unclaimedUsd = toUsd(unclaimedSol, price);
     res.json({
       serverTime: now,
       nextCheckAt: nextAirdropAt,
       nextAirdropAt,
       intervalSec,
       unclaimedSol: unclaimedSol == null ? null : +unclaimedSol.toFixed(6),
-      thresholdSol: config.minClaimSol,
-      progressPct: thresholdProgress(unclaimedSol, config.minClaimSol),
+      unclaimedUsd,
+      thresholdUsd: config.minClaimUsd,
+      progressPct: thresholdProgress(unclaimedUsd, config.minClaimUsd),
     });
   } catch (err) {
     next(err);
   }
 });
 
-// GET /accumulator — the reward-pot fill level, in the exact shape the frontend's
-// RewardJar expects: { accumulatedSol, thresholdSol }. accumulatedSol is the live
-// unclaimed creator-fee balance; when it reaches thresholdSol the next poll fires a
-// cycle, the vault drains, and the jar splashes back toward 0.
+// GET /accumulator — the reward-pot fill level for the frontend jar. The pot
+// fires a cycle when accumulatedUsd reaches thresholdUsd; accumulatedSol is kept
+// for display.
 router.get('/accumulator', async (req, res, next) => {
   try {
-    const sol = await readUnclaimedSol();
+    const [sol, price] = await Promise.all([readUnclaimedSol(), getSolPriceUsd().catch(() => null)]);
     res.json({
       accumulatedSol: sol == null ? 0 : +sol.toFixed(6),
-      thresholdSol: config.minClaimSol,
+      accumulatedUsd: toUsd(sol == null ? 0 : sol, price),
+      thresholdUsd: config.minClaimUsd,
     });
   } catch (err) {
     next(err);

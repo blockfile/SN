@@ -36,7 +36,7 @@ app.get('/', (req, res) => {
   res.json({
     name: 'babycupsy',
     description:
-      `pump.fun creator fees → buy $CUPSY for BABYCUPSY holders (claims once unclaimed fees reach ${config.minClaimSol} SOL)`,
+      `pump.fun creator fees → $SN buyback & burn + NVDAx and $SI rewards for $SN holders (claims once unclaimed fees reach $${config.minClaimUsd})`,
     dryRun: config.dryRun,
     wallet: walletPubkey(),
     endpoints: [
