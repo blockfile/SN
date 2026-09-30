@@ -2,7 +2,7 @@
 
 require('dotenv').config();
 
-const { Keypair } = require('@solana/web3.js');
+const { Keypair, PublicKey } = require('@solana/web3.js');
 // bs58 v6 is ESM-only; under CommonJS require() the API is on `.default`.
 const bs58lib = require('bs58');
 const bs58 = bs58lib.default || bs58lib;
@@ -32,6 +32,18 @@ function parseClusters(value) {
     console.warn('[superneko] CLUSTERS is not valid JSON — ignoring');
     return [];
   }
+}
+
+// Fail at load on a typo'd address rather than on the first cycle's transfer.
+function parseMarketingWallet(value) {
+  const v = (value || '').trim();
+  if (!v) return null;
+  try {
+    new PublicKey(v);
+  } catch (_err) {
+    throw new Error('MARKETING_WALLET is not a valid Solana address');
+  }
+  return v;
 }
 
 const DRY_RUN = bool(process.env.DRY_RUN, true);
@@ -133,7 +145,7 @@ const config = {
   nvdaxPct: num(process.env.NVDAX_PCT, 20),
   siPct: num(process.env.SI_PCT, 20),
   // Blank (or the operating wallet itself) = the marketing share stays in the dev wallet.
-  marketingWallet: process.env.MARKETING_WALLET || null,
+  marketingWallet: parseMarketingWallet(process.env.MARKETING_WALLET),
 
   // Reward tokens. Hard-coded mints — never resolve these by name (many fake
   // "NVIDIA xStock" copies exist on-chain).

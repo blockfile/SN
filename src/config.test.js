@@ -61,3 +61,28 @@ test('legacy BABYCUPSY / LP / dev-fee config is gone; branding defaults are Supe
   assert.ok(config.corsOrigins.includes('https://superneko.meme'));
   assert.ok(config.corsOrigins.includes('https://www.superneko.meme'));
 });
+
+test('config rejects a MARKETING_WALLET that is not a Solana address', () => {
+  delete require.cache[require.resolve('./config')];
+  process.env.MARKETING_WALLET = 'not-a-key';
+  try {
+    assert.throws(() => require('./config'), /MARKETING_WALLET is not a valid Solana address/);
+  } finally {
+    delete process.env.MARKETING_WALLET;
+    delete require.cache[require.resolve('./config')];
+  }
+});
+
+test('config trims MARKETING_WALLET; blank means none', () => {
+  const addr = 'DEW9dSN6QpWyNthphCpMmAbZP1Q4cEKR9xQXAri98WDP';
+  try {
+    for (const [raw, expected] of [[`  ${addr}\n`, addr], ['   ', null]]) {
+      delete require.cache[require.resolve('./config')];
+      process.env.MARKETING_WALLET = raw;
+      assert.strictEqual(require('./config').marketingWallet, expected);
+    }
+  } finally {
+    delete process.env.MARKETING_WALLET;
+    delete require.cache[require.resolve('./config')];
+  }
+});
