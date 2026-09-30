@@ -10,7 +10,7 @@
 //                  then its reward is split among members pro-rata by member balance.
 // Integer math throughout (BigInt). Leftover units are assigned by the
 // largest-remainder method so the amounts sum EXACTLY to totalRaw.
-function computeWeightedAllocations(holders, totalRaw, opts = {}) {
+function allocateOnce(holders, totalRaw, opts = {}) {
   const total = BigInt(totalRaw.toString());
   if (total <= 0n || !holders || holders.length === 0) return [];
 
@@ -96,4 +96,32 @@ function computeWeightedAllocations(holders, totalRaw, opts = {}) {
   return out;
 }
 
-module.exports = { computeWeightedAllocations };
+// Public entry point. opts.minAmountRaw (optional) is the dust floor: recipients
+// whose share falls below it are dropped and the total is re-split among the
+// rest, repeating until every share clears the floor (each pass removes at least
+// one holder, so this terminates). The result still sums exactly to totalRaw —
+// or is [] when every share is dust, leaving the tokens in the wallet.
+function computeWeightedAllocations(holders, totalRaw, opts = {}) {
+  const { minAmountRaw = null, ...rest } = opts;
+  let out = allocateOnce(holders, totalRaw, rest);
+  if (minAmountRaw == null) return out;
+  const min = BigInt(minAmountRaw.toString());
+  let pool = holders;
+  for (;;) {
+    const dust = new Set(out.filter((a) => BigInt(a.amountRaw) < min).map((a) => a.owner));
+    if (dust.size === 0) return out;
+    pool = pool.filter((h) => !dust.has(h.owner));
+    out = allocateOnce(pool, totalRaw, rest);
+  }
+}
+
+// Dust floor in raw units: the USD value `minUsd` at the price this leg actually
+// paid (solSpent SOL for tokensBoughtRaw). Null when it can't be priced — the
+// caller then applies no dust filter.
+function minRawForUsd({ minUsd, solSpent, solPriceUsd, tokensBoughtRaw }) {
+  const bought = BigInt((tokensBoughtRaw ?? 0).toString());
+  if (!(minUsd > 0) || !(solSpent > 0) || !(solPriceUsd > 0) || bought <= 0n) return null;
+  return BigInt(Math.ceil((minUsd * Number(bought)) / (solSpent * solPriceUsd)));
+}
+
+module.exports = { computeWeightedAllocations, minRawForUsd };

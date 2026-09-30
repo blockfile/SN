@@ -82,3 +82,45 @@ test('returns [] for empty / zero / all-zero-balance inputs', () => {
     []
   );
 });
+
+const { minRawForUsd } = require('./distribution');
+
+test('dust filter drops sub-threshold recipients and redistributes their share', () => {
+  // A's pro-rata share is 1 unit (< 10) → dropped; B receives everything.
+  const out = computeWeightedAllocations(
+    [{ owner: 'A', balanceRaw: '1' }, { owner: 'B', balanceRaw: '1000' }],
+    '1001',
+    { minAmountRaw: '10' }
+  );
+  const { m, sum } = toMap(out);
+  assert.strictEqual(sum, 1001n);
+  assert.strictEqual(m.A, undefined);
+  assert.strictEqual(m.B, 1001n);
+});
+
+test('dust filter re-checks after redistribution until stable', () => {
+  // total 100: A=1%, B=4%, C=95% → A (1) and B (4) are below 5 → C gets all 100.
+  const out = computeWeightedAllocations(
+    [{ owner: 'A', balanceRaw: '1' }, { owner: 'B', balanceRaw: '4' }, { owner: 'C', balanceRaw: '95' }],
+    '100',
+    { minAmountRaw: 5n }
+  );
+  assert.deepStrictEqual(out, [{ owner: 'C', amountRaw: '100' }]);
+});
+
+test('dust filter returns [] when every share is dust', () => {
+  const out = computeWeightedAllocations(
+    [{ owner: 'A', balanceRaw: '1' }, { owner: 'B', balanceRaw: '1' }],
+    '10',
+    { minAmountRaw: '100' }
+  );
+  assert.deepStrictEqual(out, []);
+});
+
+test('minRawForUsd converts a USD floor into raw units at this buy price', () => {
+  // 0.3 SOL bought 30,000,000 raw at $150/SOL → $45 per 30,000,000 raw → $0.50 = 333,334 raw (ceil).
+  assert.strictEqual(minRawForUsd({ minUsd: 0.5, solSpent: 0.3, solPriceUsd: 150, tokensBoughtRaw: 30_000_000n }), 333334n);
+  assert.strictEqual(minRawForUsd({ minUsd: 0.5, solSpent: 0.3, solPriceUsd: null, tokensBoughtRaw: 30_000_000n }), null);
+  assert.strictEqual(minRawForUsd({ minUsd: 0, solSpent: 0.3, solPriceUsd: 150, tokensBoughtRaw: 30_000_000n }), null);
+  assert.strictEqual(minRawForUsd({ minUsd: 0.5, solSpent: 0.3, solPriceUsd: 150, tokensBoughtRaw: 0n }), null);
+});
