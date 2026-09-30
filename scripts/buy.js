@@ -16,7 +16,7 @@ const { buyOnAmm, resolveCanonicalPool } = require('../src/solana/pumpswap');
 
   const r = grad.graduated
     ? await buyOnAmm(amount, resolveCanonicalPool())
-    : await buyOnCurve(amount);
+    : await buyOnCurve(require('../src/config').tokenMint, amount);
   console.log('result:', r);
   process.exit(0);
 })().catch((e) => {

@@ -8,14 +8,14 @@ const { MongoMemoryServer } = require('mongodb-memory-server');
 test('addAirdrop + getAirdrops: round-trip newest-first, and reward_mint filter', async () => {
   const mongod = await MongoMemoryServer.create();
   process.env.MONGODB_URI = mongod.getUri();
-  process.env.MONGODB_DB = 'babycupsy_test_airdrops';
+  process.env.MONGODB_DB = 'superneko_test_airdrops';
   const db = require('./index');
   const repo = require('./repository');
   await db.connect();
   try {
     await repo.addAirdrop({ cycleId: 1, rewardMint: 'OTHER', recipient: 'A', amountRaw: '10', amountUi: 1, signature: 's1', status: 'ok' });
-    await repo.addAirdrop({ cycleId: 1, rewardMint: 'CUPSY', recipient: 'B', amountRaw: '20', amountUi: 2, signature: 's2', status: 'ok' });
-    await repo.addAirdrop({ cycleId: 1, rewardMint: 'CUPSY', recipient: 'C', amountRaw: '30', amountUi: 3, signature: 's3', status: 'ok' });
+    await repo.addAirdrop({ cycleId: 1, rewardMint: 'SI', recipient: 'B', amountRaw: '20', amountUi: 2, signature: 's2', status: 'ok' });
+    await repo.addAirdrop({ cycleId: 1, rewardMint: 'SI', recipient: 'C', amountRaw: '30', amountUi: 3, signature: 's3', status: 'ok' });
 
     // Round-trip: all rows, newest first.
     const all = await repo.getAirdrops(10, 0);
@@ -23,10 +23,10 @@ test('addAirdrop + getAirdrops: round-trip newest-first, and reward_mint filter'
     assert.strictEqual(all.items[0].recipient, 'C'); // newest first
     assert.strictEqual(all.items[2].recipient, 'A');
 
-    // reward_mint filter — powers GET /airdrops?token=CUPSY|BABYCUPSY|OUR.
-    const cupsy = await repo.getAirdrops(10, 0, 'CUPSY');
-    assert.strictEqual(cupsy.total, 2);
-    assert.ok(cupsy.items.every((i) => i.reward_mint === 'CUPSY'));
+    // reward_mint filter — powers GET /airdrops?token=NVDAX|SI.
+    const si = await repo.getAirdrops(10, 0, 'SI');
+    assert.strictEqual(si.total, 2);
+    assert.ok(si.items.every((i) => i.reward_mint === 'SI'));
 
     const none = await repo.getAirdrops(10, 0, '__none__'); // unknown mint -> empty
     assert.strictEqual(none.total, 0);

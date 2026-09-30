@@ -1,7 +1,7 @@
 'use strict';
 
 // In-memory simulated creator-fee vault, used ONLY in DRY_RUN so the threshold
-// trigger (fire at >= MIN_CLAIM_SOL) can be exercised and tested without real fees.
+// trigger (fire at >= MIN_CLAIM_USD) can be exercised and tested without real fees.
 // Live mode never touches this — real fees accrue on-chain.
 let balanceSol = 0;
 

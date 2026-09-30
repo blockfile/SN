@@ -2,7 +2,6 @@
 
 const express = require('express');
 const cors = require('cors');
-const path = require('path');
 
 const config = require('./src/config');
 const db = require('./src/db');
@@ -34,7 +33,7 @@ app.use(express.json());
 
 app.get('/', (req, res) => {
   res.json({
-    name: 'babycupsy',
+    name: 'superneko',
     description:
       `pump.fun creator fees → $SN buyback & burn + NVDAx and $SI rewards for $SN holders (claims once unclaimed fees reach $${config.minClaimUsd})`,
     dryRun: config.dryRun,
@@ -60,10 +59,6 @@ app.get('/', (req, res) => {
   });
 });
 
-// Built-in SSE/dashboard test page, served same-origin so it needs no CORS.
-// Open http://localhost:<PORT>/sse-test in a browser.
-app.get('/sse-test', (req, res) => res.sendFile(path.join(__dirname, 'docs', 'sse-test.html')));
-
 app.use('/api', statusRoutes);
 app.use('/api', cycleRoutes);
 app.use('/api', controlRoutes);
@@ -77,7 +72,7 @@ app.use((req, res) => res.status(404).json({ error: 'not found' }));
 
 // eslint-disable-next-line no-unused-vars
 app.use((err, req, res, next) => {
-  console.error('[babycupsy] request error:', err);
+  console.error('[superneko] request error:', err);
   res.status(500).json({ error: err.message });
 });
 
@@ -85,22 +80,22 @@ let server;
 
 async function main() {
   await db.connect();
-  console.log(`[babycupsy] MongoDB connected (${config.mongoDb})`);
+  console.log(`[superneko] MongoDB connected (${config.mongoDb})`);
 
   getSolPriceUsd().catch(() => {}); // warm the price cache for USD values
 
   server = app.listen(config.port, () => {
-    console.log(`[babycupsy] listening on http://localhost:${config.port}`);
-    console.log(`[babycupsy] dryRun=${config.dryRun} wallet=${walletPubkey()}`);
+    console.log(`[superneko] listening on http://localhost:${config.port}`);
+    console.log(`[superneko] dryRun=${config.dryRun} wallet=${walletPubkey()}`);
     if (config.walletIsEphemeral) {
-      console.log('[babycupsy] WARNING: using an ephemeral wallet (no WALLET_PRIVATE_KEY set) — dry run only');
+      console.log('[superneko] WARNING: using an ephemeral wallet (no WALLET_PRIVATE_KEY set) — dry run only');
     }
     scheduler.start();
   });
 }
 
 async function shutdown(signal) {
-  console.log(`\n[babycupsy] ${signal} received, shutting down`);
+  console.log(`\n[superneko] ${signal} received, shutting down`);
   if (server) server.close();
   await db.close();
   process.exit(0);
@@ -109,7 +104,7 @@ process.on('SIGINT', () => shutdown('SIGINT'));
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 
 main().catch((err) => {
-  console.error('[babycupsy] failed to start:', err);
+  console.error('[superneko] failed to start:', err);
   process.exit(1);
 });
 

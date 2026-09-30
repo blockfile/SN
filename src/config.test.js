@@ -49,3 +49,14 @@ test('config.clusters parses a JSON array-of-arrays from env', () => {
   delete process.env.CLUSTERS;
   delete require.cache[require.resolve('./config')];
 });
+
+test('legacy BABYCUPSY / LP / dev-fee config is gone; branding defaults are Super Neko', () => {
+  delete require.cache[require.resolve('./config')];
+  const config = require('./config');
+  for (const k of ['cupsyMint', 'cupsyBuyPct', 'minClaimSol', 'solSplitBuy', 'solReserve', 'lockYears', 'lockCostSol', 'devFeePct', 'devWallet']) {
+    assert.ok(!(k in config), `${k} should be gone`);
+  }
+  assert.strictEqual(config.mongoDb, 'superneko');
+  assert.ok(config.corsOrigins.includes('https://superneko.meme'));
+  assert.ok(config.corsOrigins.includes('https://www.superneko.meme'));
+});

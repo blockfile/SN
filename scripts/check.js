@@ -3,7 +3,6 @@
 // Read-only preflight. Sends NO transactions. Verifies your config + on-chain state.
 //   node scripts/check.js
 const { PublicKey } = require('@solana/web3.js');
-const { NATIVE_MINT } = require('@solana/spl-token');
 const { config, connection, wallet, hr, sol } = require('./_util');
 
 (async () => {
@@ -12,8 +11,10 @@ const { config, connection, wallet, hr, sol } = require('./_util');
   console.log('rpcUrl     :', config.rpcUrl);
   console.log('wallet     :', wallet.publicKey.toBase58(), config.walletIsEphemeral ? '⚠️ EPHEMERAL — set WALLET_PRIVATE_KEY' : '');
   console.log('tokenMint  :', config.tokenMint || '⚠️ MISSING — set TOKEN_MINT');
-  console.log('devFeePct  :', config.devFeePct, '→ devWallet:', config.devWallet || '⚠️ unset');
-  console.log('lockYears  :', config.lockYears);
+  console.log('split      :', `marketing ${config.marketingPct}% · burn ${config.burnPct}% · NVDAx ${config.nvdaxPct}% · SI ${config.siPct}%`);
+  console.log('marketing  :', config.marketingWallet || '(unset → stays in this wallet)');
+  console.log('trigger    :', `$${config.minClaimUsd} of unclaimed fees`);
+  console.log('rewards    :', `NVDAx ${config.nvdaxMint} · SI ${config.siMint}`);
 
   hr('RPC + WALLET BALANCE');
   const lamports = await connection.getBalance(wallet.publicKey);
@@ -48,13 +49,6 @@ const { config, connection, wallet, hr, sol } = require('./_util');
   const canon = canonicalPumpPoolPda(mint);
   const canonInfo = await connection.getAccountInfo(canon);
   console.log('canonical pool:', canon.toBase58(), canonInfo ? 'EXISTS (graduated)' : 'not found (pre-bond)');
-
-  hr('OUR PRE-BOND POOL');
-  const { poolPda, lpMintPda } = require('@pump-fun/pump-swap-sdk');
-  const ourPool = poolPda(0, wallet.publicKey, mint, NATIVE_MINT);
-  const ourInfo = await connection.getAccountInfo(ourPool);
-  console.log('our pool   :', ourPool.toBase58(), ourInfo ? 'EXISTS' : 'not created yet');
-  console.log('our LP mint:', lpMintPda(ourPool).toBase58());
 
   console.log('\n✅ preflight complete (no transactions sent)');
   process.exit(0);

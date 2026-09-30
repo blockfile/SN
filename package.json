@@ -1,8 +1,8 @@
 {
-  "name": "babycupsy",
+  "name": "superneko",
   "version": "0.1.0",
   "private": true,
-  "description": "BABYCUPSY reward system: recycles pump.fun creator fees into $CUPSY airdrops for BABYCUPSY holders (DRY_RUN first).",
+  "description": "Super Neko ($SN) reward engine: pump.fun creator fees → marketing, $SN buyback & burn, and NVDAx + $SI airdrops to $SN holders (DRY_RUN first).",
   "type": "commonjs",
   "main": "server.js",
   "scripts": {
@@ -12,8 +12,6 @@
     "check": "node scripts/check.js",
     "claim": "node scripts/claim.js",
     "buy": "node scripts/buy.js",
-    "create-pool": "node scripts/create-pool.js",
-    "lock": "node scripts/lock.js",
     "run-once": "node scripts/run-once.js"
   },
   "engines": {
@@ -25,7 +23,6 @@
     "@pump-fun/pump-swap-sdk": "^1.18.0",
     "@solana/spl-token": "^0.4.9",
     "@solana/web3.js": "^1.98.2",
-    "@streamflow/stream": "^12.4.0",
     "bn.js": "^5.2.2",
     "bs58": "^6.0.0",
     "cors": "^2.8.5",

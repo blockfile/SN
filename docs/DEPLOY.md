@@ -1,23 +1,22 @@
-# babycupsy backend — Ubuntu deployment guide
+# Super Neko backend — Ubuntu deployment guide
 
 Run these on the **server** over SSH (not on your Windows machine). Assumes a fresh
 **Ubuntu 22.04/24.04 LTS** VPS and a sudo-capable user.
 
-- API (this backend): **https://api.babycupsey.com**
-- Frontend site: **https://babycupsey.com**
+- API (this backend): **https://api.superneko.meme**
+- Frontend site: **https://superneko.meme**
 
 ---
 
 ## 0. Prerequisites
 
 - A server you can SSH into: `ssh youruser@SERVER_IP`
-- **DNS:** an `A` record for `api.babycupsey.com` → `SERVER_IP` (do this first; certbot in
-  step 10 fails until it resolves). Verify: `nslookup api.babycupsey.com`
+- **DNS:** an `A` record for `api.superneko.meme` → `SERVER_IP` (do this first; certbot in
+  step 10 fails until it resolves). Verify: `nslookup api.superneko.meme`
 
-> **Current deployment:** `api.babycupsey.com` already resolves to **165.22.241.154**
-> (DigitalOcean) and nginx is installed there — this record is done.
-> The frontend `babycupsey.com` is hosted on **Netlify** (`www` 301s to the apex), *not*
-> on this server, so the droplet only ever needs the one api vhost + cert.
+> Point the `api.superneko.meme` A record at your server's IP. The frontend
+> `superneko.meme` is hosted separately, so this server only needs the one api
+> vhost + cert.
 
 ```bash
 sudo apt update && sudo apt upgrade -y
@@ -76,8 +75,8 @@ sudo apt install -y nginx certbot python3-certbot-nginx
 sudo mkdir -p /var/www
 sudo chown -R "$USER":"$USER" /var/www
 cd /var/www
-git clone https://github.com/blockfile/cupsy.git
-cd cupsy
+git clone https://github.com/blockfile/SN.git sn
+cd sn
 npm install
 ```
 
@@ -95,20 +94,21 @@ PORT=3000
 # Keep TRUE until you are ready to move real funds (simulates everything, safe).
 DRY_RUN=true
 
-# Trigger: check the fee vault every minute, claim once it holds >= 0.25 SOL.
+# Trigger: check the fee vault every minute, fire once fees are worth >= $100.
 POLL_SCHEDULE=* * * * *
-MIN_CLAIM_SOL=0.25
+MIN_CLAIM_USD=100
 
 # Mongo: Atlas SRV string, or the local default below.
 MONGODB_URI=mongodb://127.0.0.1:27017
-MONGODB_DB=babycupsy
+MONGODB_DB=superneko
 
 # Mints
-TOKEN_MINT=<your BABYCUPSY mint>
-CUPSY_MINT=6NwarBvDkXhByqVp2Qkq5i9XbtA2B3Bwe8SWGu9vpump
+TOKEN_MINT=<your $SN mint>
+# Blank = marketing share stays in the dev wallet
+MARKETING_WALLET=
 
 # Browser origins allowed to call the API — the frontend, NOT the api host.
-CORS_ORIGINS=https://babycupsey.com,https://www.babycupsey.com
+CORS_ORIGINS=https://superneko.meme,https://www.superneko.meme
 
 # Protects POST /api/run|pause|resume. Generate one: `openssl rand -hex 32`
 API_KEY=<long-random-string>
@@ -129,30 +129,30 @@ chmod 600 .env
 ## 7. Start with pm2
 
 ```bash
-cd /var/www/cupsy
-pm2 start server.js --name babycupsy
+cd /var/www/sn
+pm2 start server.js --name superneko
 pm2 save
 pm2 startup        # prints a `sudo ...` command — copy/paste & run it to enable on boot
-pm2 logs babycupsy # watch the logs; Ctrl-C to exit (app keeps running)
+pm2 logs superneko # watch the logs; Ctrl-C to exit (app keeps running)
 ```
 
 Verify locally before touching nginx:
 ```bash
-curl http://127.0.0.1:3000/          # babycupsy JSON banner
+curl http://127.0.0.1:3000/          # superneko JSON banner
 curl http://127.0.0.1:3000/summary   # headline stats JSON
 ```
 
-## 8. nginx reverse proxy for api.babycupsey.com
+## 8. nginx reverse proxy for api.superneko.meme
 
 ```bash
-sudo tee /etc/nginx/sites-available/api.babycupsey.com >/dev/null <<'NGINX'
+sudo tee /etc/nginx/sites-available/api.superneko.meme >/dev/null <<'NGINX'
 server {
     listen 80;
     listen [::]:80;
-    server_name api.babycupsey.com;
+    server_name api.superneko.meme;
 
-    access_log /var/log/nginx/babycupsy.access.log;
-    error_log  /var/log/nginx/babycupsy.error.log;
+    access_log /var/log/nginx/superneko.access.log;
+    error_log  /var/log/nginx/superneko.error.log;
 
     location / {
         proxy_pass http://127.0.0.1:3000;
@@ -172,7 +172,7 @@ server {
 }
 NGINX
 
-sudo ln -sf /etc/nginx/sites-available/api.babycupsey.com /etc/nginx/sites-enabled/
+sudo ln -sf /etc/nginx/sites-available/api.superneko.meme /etc/nginx/sites-enabled/
 sudo rm -f /etc/nginx/sites-enabled/default
 sudo nginx -t                    # must say "test is successful"
 sudo systemctl reload nginx
@@ -187,12 +187,12 @@ sudo ufw --force enable
 sudo ufw status
 ```
 
-`http://api.babycupsey.com/` should now return the JSON banner.
+`http://api.superneko.meme/` should now return the JSON banner.
 
 ## 10. HTTPS with certbot
 
 ```bash
-sudo certbot --nginx -d api.babycupsey.com
+sudo certbot --nginx -d api.superneko.meme
 sudo certbot renew --dry-run     # confirm auto-renewal works
 ```
 
@@ -200,43 +200,43 @@ Certbot rewrites the vhost to listen on 443 and adds an HTTP→HTTPS redirect; t
 proxy settings from step 8 are preserved. Confirm:
 
 ```bash
-curl https://api.babycupsey.com/summary
-curl -N https://api.babycupsey.com/api/stream   # should print `event: hello` then pings
+curl https://api.superneko.meme/summary
+curl -N https://api.superneko.meme/api/stream   # should print `event: hello` then pings
 ```
 
 Renewal is automatic via the `certbot.timer` systemd unit — nothing else to schedule.
 
 ## 11. Point the frontend at the API
 
-In the frontend (babycupsey.com), set the API base URL to `https://api.babycupsey.com`
-and open the SSE stream at `https://api.babycupsey.com/api/stream`. If you change
-`CORS_ORIGINS`, run `pm2 restart babycupsy` for it to take effect.
+In the frontend (superneko.meme), set the API base URL to `https://api.superneko.meme`
+and open the SSE stream at `https://api.superneko.meme/api/stream`. If you change
+`CORS_ORIGINS`, run `pm2 restart superneko` for it to take effect.
 
 ---
 
 ## Redeploying / updating
 
 ```bash
-cd /var/www/cupsy
+cd /var/www/sn
 git pull
 npm install            # only if dependencies changed
-pm2 restart babycupsy
-pm2 logs babycupsy --lines 50
+pm2 restart superneko
+pm2 logs superneko --lines 50
 ```
 
 ## Troubleshooting
 
 | Symptom | Check |
 |---|---|
-| 502 Bad Gateway | `pm2 status` / `pm2 logs babycupsy` — the app is down or not on PORT 3000 |
-| CORS error in browser | `CORS_ORIGINS` must list the frontend origin exactly (scheme + host, no trailing slash), then `pm2 restart babycupsy` |
+| 502 Bad Gateway | `pm2 status` / `pm2 logs superneko` — the app is down or not on PORT 3000 |
+| CORS error in browser | `CORS_ORIGINS` must list the frontend origin exactly (scheme + host, no trailing slash), then `pm2 restart superneko` |
 | SSE connects but no events | `proxy_buffering off` missing from the active vhost (`sudo nginx -T \| grep -A5 proxy_pass`) |
 | App won't start | Mongo unreachable — `sudo systemctl status mongod` or Atlas IP allowlist |
-| certbot fails | `api.babycupsey.com` A record not resolving to `SERVER_IP` yet, or port 80 blocked |
+| certbot fails | `api.superneko.meme` A record not resolving to `SERVER_IP` yet, or port 80 blocked |
 
 ## Going live (real funds) — checklist
 - [ ] Paid `RPC_URL` set (public RPC can't enumerate large holder sets).
-- [ ] Funded `WALLET_PRIVATE_KEY` set (needs SOL beyond the 20% reserve for first-run ATA rent).
-- [ ] `TOKEN_MINT` is the real BABYCUPSY mint; `CUPSY_MINT` correct.
+- [ ] Funded `WALLET_PRIVATE_KEY` set (the $SN creator wallet; first cycles pay ~0.0016 SOL rent per new NVDAx/$SI recipient, deducted from marketing).
+- [ ] `TOKEN_MINT` is the real $SN mint; `NVDAX_MINT` / `SI_MINT` left at their defaults.
 - [ ] `API_KEY` set to a long random string.
-- [ ] `DRY_RUN=false`, then `pm2 restart babycupsy` and watch `pm2 logs babycupsy` for the first cycle.
+- [ ] `DRY_RUN=false`, then `pm2 restart superneko` and watch `pm2 logs superneko` for the first cycle.
